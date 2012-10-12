@@ -94,7 +94,10 @@ namespace CallingConv {
 
     /// MBLAZE_INTR - Calling convention used for MBlaze interrupt support
     /// routines (i.e. GCC's save_volatiles attribute).
-    MBLAZE_SVOL = 74
+    MBLAZE_SVOL = 74,
+    
+    /// CIL_MANAGED - Calling convention used for CIL managed calls.
+    CIL_Managed = 80
   };
 } // End CallingConv namespace
 

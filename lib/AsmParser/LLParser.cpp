@@ -1118,6 +1118,7 @@ bool LLParser::ParseOptionalCallingConv(CallingConv::ID &CC) {
   case lltok::kw_msp430_intrcc:  CC = CallingConv::MSP430_INTR; break;
   case lltok::kw_ptx_kernel:     CC = CallingConv::PTX_Kernel; break;
   case lltok::kw_ptx_device:     CC = CallingConv::PTX_Device; break;
+  case lltok::kw_cil_managed:    CC = CallingConv::CIL_Managed; break;
   case lltok::kw_cc: {
       unsigned ArbitraryCC;
       Lex.Lex();

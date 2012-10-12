@@ -80,6 +80,7 @@ static void PrintCallingConv(unsigned cc, raw_ostream &Out)
     case CallingConv::MSP430_INTR:  Out << "msp430_intrcc"; break;
     case CallingConv::PTX_Kernel:   Out << "ptx_kernel"; break;
     case CallingConv::PTX_Device:   Out << "ptx_device"; break;
+    case CallingConv::CIL_Managed:  Out << "cil_managed"; break;
     default:                        Out << "cc" << cc; break;
   }
 }
