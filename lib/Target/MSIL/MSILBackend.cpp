@@ -233,7 +233,7 @@ bool MSILWriter::isZeroValue(const Value* V) {
 }
 
 
-std::string MSILWriter::getValueName(const Value* V) {
+std::string MSILWriter::getValueName(const Value* V, bool WrapInSpaces) {
   std::string Name;
   if (const GlobalValue *GV = dyn_cast<GlobalValue>(V))
     Name = GV->getName();
@@ -243,6 +243,9 @@ std::string MSILWriter::getValueName(const Value* V) {
     Name = "tmp" + utostr(No);
   }
   
+  if (!WrapInSpaces)
+    return Name;
+
   // Name into the quotes allow control and space characters.
   return "'"+Name+"'";
 }
@@ -286,6 +289,8 @@ std::string MSILWriter::getConvModopt(CallingConv::ID CallingConvID) {
     return "modopt([mscorlib]System.Runtime.CompilerServices.CallConvStdcall) ";
   case CallingConv::X86_ThisCall:
     return "modopt([mscorlib]System.Runtime.CompilerServices.CallConvThiscall) ";
+  case CallingConv::CIL_Managed:
+    return "";
   default:
     errs() << "CallingConvID = " << CallingConvID << '\n';
     llvm_unreachable("Unsupported calling convention");
@@ -785,24 +790,37 @@ std::string MSILWriter::getCallSignature(const FunctionType* Ty,
   return Tmp+")";
 }
 
+void MSILWriter::printManagedCall(const Function* Fn,
+                                  const Instruction* Inst) {
+  std::string Name = getValueName(Fn, false /*WrapInSpaces*/);
+  printSimpleInstruction("call",
+    getCallSignature(Fn->getFunctionType(),Inst,Name).c_str());
+}
 
 void MSILWriter::printFunctionCall(const Value* FnVal,
                                    const Instruction* Inst) {
-  // Get function calling convention.
-  std::string Name = "";
+  CallingConv::ID CC = CallingConv::C;
   if (const CallInst* Call = dyn_cast<CallInst>(Inst))
-    Name = getConvModopt(Call->getCallingConv());
+    CC = Call->getCallingConv();
   else if (const InvokeInst* Invoke = dyn_cast<InvokeInst>(Inst))
-    Name = getConvModopt(Invoke->getCallingConv());
+    CC = Invoke->getCallingConv();
   else {
     errs() << "Instruction = " << Inst->getName() << '\n';
     llvm_unreachable("Need \"Invoke\" or \"Call\" instruction only");
   }
+
+  // Get function calling convention.
+  std::string Name = getConvModopt(CC);
+
   if (const Function* F = dyn_cast<Function>(FnVal)) {
-    // Direct call.
-    Name += getValueName(F);
-    printSimpleInstruction("call",
-      getCallSignature(F->getFunctionType(),Inst,Name).c_str());
+    if (CC == CallingConv::CIL_Managed) {
+      printManagedCall(F, Inst);
+    } else {
+      // Direct call.
+      Name += getValueName(F);
+      printSimpleInstruction("call",
+        getCallSignature(F->getFunctionType(),Inst,Name).c_str());
+    }
   } else {
     // Indirect function call.
     const PointerType* PTy = cast<PointerType>(FnVal->getType());
@@ -1679,7 +1697,11 @@ void MSILWriter::printExternals() {
     if (I->isIntrinsic()) continue;
     if (I->isDeclaration()) {
       const Function* F = I; 
-      std::string Name = getConvModopt(F->getCallingConv())+getValueName(F);
+      CallingConv::ID CC = F->getCallingConv();
+      // Managed functions don't need to be declared.
+      if (CC == CallingConv::CIL_Managed)
+        continue;
+      std::string Name = getConvModopt(CC)+getValueName(F);
       std::string Sig = 
         getCallSignature(cast<FunctionType>(F->getFunctionType()), NULL, Name);
       *Out << ".method static hidebysig pinvokeimpl(\""

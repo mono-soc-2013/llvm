@@ -133,7 +133,7 @@ namespace llvm {
 
     bool isZeroValue(const Value* V);
 
-    std::string getValueName(const Value* V);
+    std::string getValueName(const Value* V, bool WrapInSpaces = true);
 
     std::string getLabelName(const Value* V);
 
@@ -202,6 +202,8 @@ namespace llvm {
                                  std::string Name);
 
     void printFunctionCall(const Value* FnVal, const Instruction* Inst);
+
+    void printManagedCall(const Function* Fn, const Instruction* Inst);
 
     void printIntrinsicCall(const IntrinsicInst* Inst);
 
