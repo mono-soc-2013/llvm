@@ -860,7 +860,7 @@ void MSILWriter::printIntrinsicCall(const IntrinsicInst* Inst) {
     printIndirectLoad(Inst->getArgOperand(0));
     printIndirectLoad(Inst->getArgOperand(1));
     printSimpleInstruction("cpobj","[mscorlib]System.ArgIterator");
-    break;        
+    break;
   default:
     errs() << "Intrinsic ID = " << Inst->getIntrinsicID() << '\n';
     llvm_unreachable("Invalid intrinsic function");
