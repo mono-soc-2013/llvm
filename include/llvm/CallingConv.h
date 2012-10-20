@@ -96,8 +96,14 @@ namespace CallingConv {
     /// routines (i.e. GCC's save_volatiles attribute).
     MBLAZE_SVOL = 74,
     
-    /// CIL_MANAGED - Calling convention used for CIL managed calls.
-    CIL_Managed = 80
+    /// CIL_Static - Calling convention used for CIL static calls.
+    CIL_Static = 80,
+
+    /// CIL_Instance - Calling convention used for CIL instance calls.
+    CIL_Instance = 81,
+
+    /// CIL_NewObj - Calling convention used for CIL new object calls.
+    CIL_NewObj = 82
   };
 } // End CallingConv namespace
 

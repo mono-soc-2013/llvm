@@ -525,7 +525,9 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(msp430_intrcc);
   KEYWORD(ptx_kernel);
   KEYWORD(ptx_device);
-  KEYWORD(cil_managed);
+  KEYWORD(cil_static);
+  KEYWORD(cil_instance);
+  KEYWORD(cil_newobj);
 
   KEYWORD(cc);
   KEYWORD(c);
