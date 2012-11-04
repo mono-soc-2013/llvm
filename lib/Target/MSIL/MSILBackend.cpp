@@ -953,6 +953,17 @@ void MSILWriter::printIntrinsicCall(const CallInst* Inst) {
     printIndirectLoad(Inst->getArgOperand(1));
     printSimpleInstruction("cpobj","[mscorlib]System.ArgIterator");
     break;
+  case Intrinsic::cil_ldstr: {
+    MDNode *MD = Inst->getMetadata("cil.str");
+    assert(MD->getNumOperands() == 1);
+    
+    MDString *MS = dyn_cast<MDString>(MD->getOperand(0));
+    assert(MS && "Expected a valid metadata string");
+    
+    printSimpleInstruction("ldstr",
+      (std::string("\"") + MS->getString().str() + "\"").c_str());
+    break;
+  }
   default:
     errs() << "Intrinsic ID = " << Id << '\n';
     llvm_unreachable("Invalid intrinsic function");
