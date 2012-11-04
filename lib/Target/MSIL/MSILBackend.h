@@ -153,7 +153,7 @@ namespace llvm {
     std::string getPointerTypeName(const Type* Ty);
 
     std::string getTypeName(const Type* Ty, bool isSigned = false,
-                            bool isNested = false);
+                            bool isNested = false, bool isManaged = false);
 
     ValueType getValueLocation(const Value* V);
 
@@ -200,15 +200,22 @@ namespace llvm {
     void printGepInstruction(const Value* V, gep_type_iterator I,
                              gep_type_iterator E);
 
+    enum CLICallType {
+      CLI_Native,
+      CLI_Ctor,
+      CLI_Static,
+      CLI_Instance
+    };
+
     std::string getCallSignature(const FunctionType* Ty,
                                  const Instruction* Inst,
-                                 std::string Name);
+                                 std::string Name, CLICallType = CLI_Native);
 
     void printFunctionCall(const Value* FnVal, const Instruction* Inst);
 
-    void printManagedCall(const Function* Fn, const Instruction* Inst);
+    void printManagedStaticCall(const Function* Fn, const Instruction* Inst);
 
-    void printIntrinsicCall(const IntrinsicInst* Inst);
+    void printManagedInstanceCall(const Function* Fn, const Instruction* Inst);
 
     void printCallInstruction(const Instruction* Inst);
 

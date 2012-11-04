@@ -343,7 +343,8 @@ std::string MSILWriter::getConvModopt(CallingConv::ID CallingConvID) {
     return "modopt([mscorlib]System.Runtime.CompilerServices.CallConvStdcall) ";
   case CallingConv::X86_ThisCall:
     return "modopt([mscorlib]System.Runtime.CompilerServices.CallConvThiscall) ";
-  case CallingConv::CIL_Managed:
+  case CallingConv::CIL_Static:
+  case CallingConv::CIL_Instance:
     return "";
   default:
     errs() << "CallingConvID = " << CallingConvID << '\n';
@@ -400,17 +401,23 @@ std::string MSILWriter::getPrimitiveTypeName(const Type* Ty, bool isSigned) {
 
 
 std::string MSILWriter::getTypeName(const Type* Ty, bool isSigned,
-                                    bool isNested) {
+                                    bool isNested, bool isManaged) {
   if (Ty->isPrimitiveType() || Ty->isIntegerTy())
     return getPrimitiveTypeName(Ty,isSigned);
   // FIXME: "OpaqueType" support
   switch (Ty->getTypeID()) {
   case Type::PointerTyID:
+    if (isManaged)
+      return getTypeName(Ty->getPointerElementType(), isSigned, isNested,
+        isManaged);
     return "void* ";
   case Type::StructTyID: {
     const StructType* Struct = cast<StructType>(Ty);
     if (!Struct->hasName())
       return StringRef();
+    // FIXME: for now assume opaque structs are managed types.
+    if (Struct->isOpaque()) 
+      return "class " + Ty->getStructName().str();
     if (isNested)
       return Ty->getStructName();
     return "valuetype '"+Ty->getStructName().str()+"' ";
@@ -814,16 +821,24 @@ void MSILWriter::printGepInstruction(const Value* V, gep_type_iterator I,
 
 std::string MSILWriter::getCallSignature(const FunctionType* Ty,
                                          const Instruction* Inst,
-                                         std::string Name) {
+                                         std::string Name, CLICallType CallType) {
+  bool isManaged = CallType != CLI_Native;
   std::string Tmp("");
   if (Ty->isVarArg()) Tmp += "vararg ";
   // Name and return type.
-  Tmp += getTypeName(Ty->getReturnType())+Name+"(";
+  if (CallType == CLI_Ctor)
+    Tmp += getTypeName(Type::getVoidTy(ModulePtr->getContext()))+Name+"(";
+  else
+    Tmp += getTypeName(Ty->getReturnType(), false, false, isManaged)+Name+"(";
   // Function argument type list.
   unsigned NumParams = Ty->getNumParams();
+  bool PrintComma = false;
   for (unsigned I = 0; I!=NumParams; ++I) {
-    if (I!=0) Tmp += ",";
-    Tmp += getTypeName(Ty->getParamType(I));
+    if ((CallType == CLI_Instance) && (I==0))
+      continue; // Skip the first parameter for instance methods
+    if (PrintComma) Tmp += ",";
+    Tmp += getTypeName(Ty->getParamType(I), false, false, isManaged);
+    PrintComma = true;
   }
   // CLR needs to know the exact amount of parameters received by vararg
   // function, because caller cleans the stack.
@@ -837,18 +852,26 @@ std::string MSILWriter::getCallSignature(const FunctionType* Ty,
       Tmp += "... , ";
       for (unsigned J = NumParams; J!=NumOperands; ++J) {
         if (J!=NumParams) Tmp += ", ";
-        Tmp += getTypeName(Inst->getOperand(J+Org)->getType());
+        Tmp += getTypeName(Inst->getOperand(J+Org)->getType(), false, false,
+          isManaged);
       }
     }
   }
   return Tmp+")";
 }
 
-void MSILWriter::printManagedCall(const Function* Fn,
+void MSILWriter::printManagedStaticCall(const Function* Fn,
                                   const Instruction* Inst) {
   std::string Name = getValueName(Fn, false /*WrapInSpaces*/);
   printSimpleInstruction("call",
-    getCallSignature(Fn->getFunctionType(),Inst,Name).c_str());
+    getCallSignature(Fn->getFunctionType(),Inst,Name,CLI_Static).c_str());
+}
+
+void MSILWriter::printManagedInstanceCall(const Function* Fn,
+                                  const Instruction* Inst) {
+  std::string Name = getValueName(Fn, false /*WrapInSpaces*/);
+  printSimpleInstruction("call instance",
+    getCallSignature(Fn->getFunctionType(),Inst,Name,CLI_Instance).c_str());
 }
 
 void MSILWriter::printFunctionCall(const Value* FnVal,
@@ -867,9 +890,11 @@ void MSILWriter::printFunctionCall(const Value* FnVal,
   std::string Name = getConvModopt(CC);
 
   if (const Function* F = dyn_cast<Function>(FnVal)) {
-    if (CC == CallingConv::CIL_Managed) {
-      printManagedCall(F, Inst);
-    } else {
+    if (CC == CallingConv::CIL_Static) {
+      printManagedStaticCall(F, Inst);
+    } else if (CC == CallingConv::CIL_Instance) {
+      printManagedInstanceCall(F, Inst);
+    }else {
       // Direct call.
       Name += getValueName(F);
       printSimpleInstruction("call",
@@ -1742,6 +1767,15 @@ const char* MSILWriter::getLibraryForSymbol(StringRef Name, bool isFunction,
   return "MSVCRT.DLL";  
 }
 
+static bool isManagedCallConv(CallingConv::ID CC) {
+  switch(CC) {
+  default: return false;
+  case CallingConv::CIL_Static:
+  case CallingConv::CIL_Instance:
+  case CallingConv::CIL_NewObj:
+    return true;
+  }
+}
 
 void MSILWriter::printExternals() {
   Module::const_iterator I,E;
@@ -1753,8 +1787,9 @@ void MSILWriter::printExternals() {
       const Function* F = I; 
       CallingConv::ID CC = F->getCallingConv();
       // Managed functions don't need to be declared.
-      if (CC == CallingConv::CIL_Managed)
+      if (isManagedCallConv(CC))
         continue;
+
       std::string Name = getConvModopt(CC)+getValueName(F);
       std::string Sig = 
         getCallSignature(cast<FunctionType>(F->getFunctionType()), NULL, Name);
