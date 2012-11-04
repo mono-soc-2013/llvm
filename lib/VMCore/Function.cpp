@@ -390,7 +390,8 @@ enum IIT_Info {
   IIT_STRUCT5 = 21,
   IIT_EXTEND_VEC_ARG = 22,
   IIT_TRUNC_VEC_ARG = 23,
-  IIT_ANYPTR = 24
+  IIT_ANYPTR = 24,
+  IIT_VARARGS = 25
 };
 
 
@@ -478,6 +479,10 @@ static void DecodeIITType(unsigned &NextElt, ArrayRef<unsigned char> Infos,
                                              ArgInfo));
     return;
   }
+  case IIT_VARARGS: {
+    OutputTable.push_back(IITDescriptor::get(IITDescriptor::VarArg, 0));
+    return;
+  }
   case IIT_EMPTYSTRUCT:
     OutputTable.push_back(IITDescriptor::get(IITDescriptor::Struct, 0));
     return;
@@ -562,6 +567,9 @@ static Type *DecodeFixedType(ArrayRef<Intrinsic::IITDescriptor> &Infos,
     return StructType::get(Context, ArrayRef<Type*>(Elts,D.Struct_NumElements));
   }
 
+  case IITDescriptor::VarArg:
+    llvm_unreachable("unexpected varargs");
+
   case IITDescriptor::Argument:
     return Tys[D.getArgumentNumber()];
   case IITDescriptor::ExtendVecArgument:
@@ -585,11 +593,16 @@ FunctionType *Intrinsic::getType(LLVMContext &Context,
   ArrayRef<IITDescriptor> TableRef = Table;
   Type *ResultTy = DecodeFixedType(TableRef, Tys, Context);
     
+  bool IsVarArgs = false;
   SmallVector<Type*, 8> ArgTys;
   while (!TableRef.empty())
-    ArgTys.push_back(DecodeFixedType(TableRef, Tys, Context));
+    if (TableRef.front().Kind == IITDescriptor::VarArg) {
+      TableRef = TableRef.slice(1);
+      IsVarArgs = true;
+    } else
+      ArgTys.push_back(DecodeFixedType(TableRef, Tys, Context));
 
-  return FunctionType::get(ResultTy, ArgTys, false); 
+  return FunctionType::get(ResultTy, ArgTys, IsVarArgs); 
 }
 
 bool Intrinsic::isOverloaded(ID id) {

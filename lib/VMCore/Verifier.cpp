@@ -1763,6 +1763,11 @@ bool Verifier::VerifyIntrinsicType(Type *Ty,
         return true;
     return false;
   }
+
+  case IITDescriptor::VarArg: {
+    // Any type can match.
+    return false;
+  }
       
   case IITDescriptor::Argument:
     // Two cases here - If this is the second occurrence of an argument, verify
@@ -1810,7 +1815,7 @@ void Verifier::visitIntrinsicFunctionCall(Intrinsic::ID ID, CallInst &CI) {
   // Verify that the intrinsic prototype lines up with what the .td files
   // describe.
   FunctionType *IFTy = IF->getFunctionType();
-  Assert1(!IFTy->isVarArg(), "Intrinsic prototypes are not varargs", IF);
+  //Assert1(!IFTy->isVarArg(), "Intrinsic prototypes are not varargs", IF);
   
   SmallVector<Intrinsic::IITDescriptor, 8> Table;
   getIntrinsicInfoTableEntries(ID, Table);
@@ -1822,6 +1827,9 @@ void Verifier::visitIntrinsicFunctionCall(Intrinsic::ID ID, CallInst &CI) {
   for (unsigned i = 0, e = IFTy->getNumParams(); i != e; ++i)
     Assert1(!VerifyIntrinsicType(IFTy->getParamType(i), TableRef, ArgTys),
             "Intrinsic has incorrect argument type!", IF);
+  if (IFTy->isVarArg())
+    while (!TableRef.empty())
+      TableRef = TableRef.slice(1);
   Assert1(TableRef.empty(), "Intrinsic has too few arguments!", IF);
 
   // Now that we have the intrinsic ID and the actual argument types (and we

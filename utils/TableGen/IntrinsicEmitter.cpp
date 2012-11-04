@@ -240,7 +240,8 @@ enum IIT_Info {
   IIT_STRUCT5 = 21,
   IIT_EXTEND_VEC_ARG = 22,
   IIT_TRUNC_VEC_ARG = 23,
-  IIT_ANYPTR = 24
+  IIT_ANYPTR = 24,
+  IIT_VARARGS = 25
 };
 
 
@@ -266,6 +267,7 @@ static void EncodeFixedValueType(MVT::SimpleValueType VT,
   case MVT::x86mmx: return Sig.push_back(IIT_MMX);
   // MVT::OtherVT is used to mean the empty struct type here.
   case MVT::Other: return Sig.push_back(IIT_EMPTYSTRUCT);
+  case MVT::isVoid: return Sig.push_back(IIT_VARARGS);
   }
 }
 

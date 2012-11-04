@@ -112,6 +112,9 @@ namespace llvm {
       // This value must be a multiple of 32.
       MAX_ALLOWED_VALUETYPE = 64,
 
+      // VarArgs - Variable arguments.
+      VarArgs        = 249,
+
       // Metadata - This is MDNode or MDString.
       Metadata       = 250,
 
