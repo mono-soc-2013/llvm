@@ -968,6 +968,9 @@ void MSILWriter::printIntrinsicCall(const CallInst* Inst) {
     printSimpleInstruction("ldnull");
     break;
   }
+  case Intrinsic::cil_newobj: {
+    break;
+  }
   default:
     errs() << "Intrinsic ID = " << Id << '\n';
     llvm_unreachable("Invalid intrinsic function");
