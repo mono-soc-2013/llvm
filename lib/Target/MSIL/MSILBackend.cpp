@@ -1593,7 +1593,9 @@ void MSILWriter::printDeclarations(const ValueSymbolTable& ST) {
     // Print not duplicated type
     if (Printed.insert(Ty).second) {
       *Out << ".class value explicit ansi sealed '" << Name << "'";
-      *Out << " { .pack " << 1 << " .size " << TD->getTypeAllocSize((Type*)Ty);
+      *Out << " { .pack " << 1;
+      if (Ty->isSized())
+        *Out << " .size " << TD->getTypeAllocSize(const_cast<Type*>(Ty));
       *Out << " }\n\n";
     }
   }
