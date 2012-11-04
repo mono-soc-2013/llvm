@@ -217,6 +217,8 @@ namespace llvm {
 
     void printManagedInstanceCall(const Function* Fn, const Instruction* Inst);
 
+    void printNewObjCall(const Function* Fn, const Instruction* Inst);
+
     void printCallInstruction(const Instruction* Inst);
 
     void printICmpInstruction(unsigned Predicate, const Value* Left,

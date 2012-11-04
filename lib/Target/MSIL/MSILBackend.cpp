@@ -345,6 +345,7 @@ std::string MSILWriter::getConvModopt(CallingConv::ID CallingConvID) {
     return "modopt([mscorlib]System.Runtime.CompilerServices.CallConvThiscall) ";
   case CallingConv::CIL_Static:
   case CallingConv::CIL_Instance:
+  case CallingConv::CIL_NewObj:
     return "";
   default:
     errs() << "CallingConvID = " << CallingConvID << '\n';
@@ -874,6 +875,14 @@ void MSILWriter::printManagedInstanceCall(const Function* Fn,
     getCallSignature(Fn->getFunctionType(),Inst,Name,CLI_Instance).c_str());
 }
 
+void MSILWriter::printNewObjCall(const Function* Fn,
+                                 const Instruction* Inst) {
+  std::string Name = getValueName(Fn, false /*WrapInSpaces*/);
+  printSimpleInstruction("newobj instance",
+    getCallSignature(Fn->getFunctionType(),Inst,Name,CLI_Ctor).c_str());
+}
+
+
 void MSILWriter::printFunctionCall(const Value* FnVal,
                                    const Instruction* Inst) {
   CallingConv::ID CC = CallingConv::C;
@@ -894,6 +903,8 @@ void MSILWriter::printFunctionCall(const Value* FnVal,
       printManagedStaticCall(F, Inst);
     } else if (CC == CallingConv::CIL_Instance) {
       printManagedInstanceCall(F, Inst);
+    } else if (CC == CallingConv::CIL_NewObj) {
+      printNewObjCall(F, Inst);
     }else {
       // Direct call.
       Name += getValueName(F);
