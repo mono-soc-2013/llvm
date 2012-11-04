@@ -73,7 +73,61 @@ bool MSILModule::runOnModule(Module &M) {
   UsedTypes = &getAnalysis<FindUsedTypes>().getTypes();
 #endif
 
+  Changed |= lowerIntrinsics(M);
+
   return Changed;
+}
+
+bool MSILModule::lowerIntrinsics(Module &M) {
+  bool dirty = false;
+
+  IntrinsicLowering IL(*Writer->TD);
+  IL.AddPrototypes(M);
+
+  for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
+    for (Function::iterator FI = I->begin(), FE = I->end(); FI != FE; ++FI)
+      dirty |= runOnBasicBlock(*FI, IL);
+  }
+
+  return dirty;
+}
+
+static bool isManagedIntrinsic(Intrinsic::ID Id) {
+  switch(Id) {
+  default: return false;
+  case Intrinsic::cil_ldstr:
+  case Intrinsic::cil_ldnull:
+  case Intrinsic::cil_newobj:
+  case Intrinsic::cil_newarr:
+    return true;
+  }
+}
+
+bool MSILModule::runOnBasicBlock(BasicBlock &BB, IntrinsicLowering &IL) {
+  bool dirty = false;
+  for (BasicBlock::iterator BI = BB.begin(), BE = BB.end(); BI != BE;) {
+    IntrinsicInst *II = dyn_cast<IntrinsicInst>(&*BI);
+    ++BI;
+
+    if (!II) continue;
+    Intrinsic::ID Id = II->getIntrinsicID();
+
+    if (isManagedIntrinsic(Id))
+      continue;
+    
+    switch (Id) {
+    default:
+      IL.LowerIntrinsicCall(II);
+      dirty = true;
+      break;
+    case Intrinsic::vastart:
+    case Intrinsic::vaend:
+    case Intrinsic::vacopy:
+      continue;
+    }
+  }
+
+  return dirty;
 }
 
 char MSILModule::ID = 0;

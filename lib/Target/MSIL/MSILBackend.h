@@ -27,6 +27,7 @@
 #include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Target/TargetData.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/CodeGen/IntrinsicLowering.h"
 
 namespace llvm {
   extern Target TheMSILTarget;
@@ -57,6 +58,8 @@ namespace llvm {
 
     virtual bool runOnModule(Module &M);
 
+    bool lowerIntrinsics(Module &M);
+    bool runOnBasicBlock(BasicBlock &BB, IntrinsicLowering &IL);
   };
 
   void initializeMSILWriterPass(PassRegistry&);
