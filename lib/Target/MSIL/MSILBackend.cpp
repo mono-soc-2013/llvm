@@ -922,9 +922,11 @@ void MSILWriter::printFunctionCall(const Value* FnVal,
 }
 
 
-void MSILWriter::printIntrinsicCall(const IntrinsicInst* Inst) {
+void MSILWriter::printIntrinsicCall(const CallInst* Inst) {
   std::string Name;
-  switch (Inst->getIntrinsicID()) {
+  Intrinsic::ID Id = (Intrinsic::ID) Inst->getCalledFunction()->
+    getIntrinsicID();
+  switch (Id) {
   case Intrinsic::vastart:
     Name = getValueName(Inst->getArgOperand(0));
     Name.insert(Name.length()-1,"$valist");
@@ -952,7 +954,7 @@ void MSILWriter::printIntrinsicCall(const IntrinsicInst* Inst) {
     printSimpleInstruction("cpobj","[mscorlib]System.ArgIterator");
     break;
   default:
-    errs() << "Intrinsic ID = " << Inst->getIntrinsicID() << '\n';
+    errs() << "Intrinsic ID = " << Id << '\n';
     llvm_unreachable("Invalid intrinsic function");
   }
 }
@@ -962,13 +964,13 @@ void MSILWriter::printCallInstruction(const Instruction* Inst) {
   if (isa<IntrinsicInst>(Inst)) {
     // Handle intrinsic function.
     printIntrinsicCall(cast<IntrinsicInst>(Inst));
-  } else {
-    const CallInst *CI = cast<CallInst>(Inst);
-    // Load arguments to stack and call function.
-    for (int I = 0, E = CI->getNumArgOperands(); I!=E; ++I)
-      printValueLoad(CI->getArgOperand(I));
-    printFunctionCall(CI->getCalledFunction(), Inst);
+    return;
   }
+  const CallInst *CI = cast<CallInst>(Inst);
+  // Load arguments to stack and call function.
+  for (int I = 0, E = CI->getNumArgOperands(); I!=E; ++I)
+    printValueLoad(CI->getArgOperand(I));
+  printFunctionCall(CI->getCalledFunction(), Inst);
 }
 
 
@@ -1733,7 +1735,9 @@ void MSILWriter::printGlobalConstructors(const GlobalVariable* G) {
     llvm::Function* Fn = cast<Function>(Struct->getOperand(1));
     if (!Fn) continue;
 
-    printFunctionCall(Fn, CallInst::Create(Fn));
+    CallInst *Call = CallInst::Create(Fn);
+    printFunctionCall(Fn, Call);
+    delete Call;
   }
 }
 
@@ -1796,6 +1800,9 @@ void MSILWriter::printExternals() {
     if (I->isIntrinsic()) continue;
     if (I->isDeclaration()) {
       const Function* F = I; 
+      if (isManagedIntrinsic((Intrinsic::ID)F->getIntrinsicID()))
+        continue;
+
       CallingConv::ID CC = F->getCallingConv();
       // Managed functions don't need to be declared.
       if (isManagedCallConv(CC))

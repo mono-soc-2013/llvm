@@ -219,6 +219,8 @@ namespace llvm {
 
     void printNewObjCall(const Function* Fn, const Instruction* Inst);
 
+    void printIntrinsicCall(const CallInst* Inst);
+
     void printCallInstruction(const Instruction* Inst);
 
     void printICmpInstruction(unsigned Predicate, const Value* Left,
