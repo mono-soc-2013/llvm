@@ -136,6 +136,12 @@ public:
   void incorporateFunction(const Function &F);
   void purgeFunction();
 
+  /// incorporateType/purgeType- If you'd like to deal with a type,
+  /// use these two methods to get its data into the ValueEnumerator!
+  ///
+  void incorporateType(const Type& Ty);
+  void purgeType();
+
 private:
   void OptimizeConstants(unsigned CstStart, unsigned CstEnd);
     

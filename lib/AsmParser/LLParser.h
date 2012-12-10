@@ -105,6 +105,7 @@ namespace llvm {
       unsigned MDKind, MDSlot;
     };
     DenseMap<Instruction*, std::vector<MDRef> > ForwardRefInstMetadata;
+    DenseMap<Type*, std::vector<MDRef> > ForwardRefTypeMetadata;
 
     // Type resolution handling data structures.  The location is set when we
     // have processed a use of the type but not a definition yet.
@@ -324,6 +325,7 @@ namespace llvm {
     bool ParseMetadataValue(ValID &ID, PerFunctionState *PFS);
     bool ParseMDNodeVector(SmallVectorImpl<Value*> &, PerFunctionState *PFS);
     bool ParseInstructionMetadata(Instruction *Inst, PerFunctionState *PFS);
+    bool ParseTypeMetadata(Type *Ty, PerFunctionState *PFS);
 
     // Function Parsing.
     struct ArgInfo {

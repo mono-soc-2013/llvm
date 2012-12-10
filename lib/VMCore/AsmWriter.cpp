@@ -156,168 +156,6 @@ static void PrintLLVMName(raw_ostream &OS, const Value *V) {
 }
 
 //===----------------------------------------------------------------------===//
-// TypePrinting Class: Type printing machinery
-//===----------------------------------------------------------------------===//
-
-/// TypePrinting - Type printing machinery.
-namespace {
-class TypePrinting {
-  TypePrinting(const TypePrinting &) LLVM_DELETED_FUNCTION;
-  void operator=(const TypePrinting&) LLVM_DELETED_FUNCTION;
-public:
-
-  /// NamedTypes - The named types that are used by the current module.
-  TypeFinder NamedTypes;
-
-  /// NumberedTypes - The numbered types, along with their value.
-  DenseMap<StructType*, unsigned> NumberedTypes;
-
-
-  TypePrinting() {}
-  ~TypePrinting() {}
-
-  void incorporateTypes(const Module &M);
-
-  void print(Type *Ty, raw_ostream &OS);
-
-  void printStructBody(StructType *Ty, raw_ostream &OS);
-};
-} // end anonymous namespace.
-
-
-void TypePrinting::incorporateTypes(const Module &M) {
-  NamedTypes.run(M, false);
-
-  // The list of struct types we got back includes all the struct types, split
-  // the unnamed ones out to a numbering and remove the anonymous structs.
-  unsigned NextNumber = 0;
-
-  std::vector<StructType*>::iterator NextToUse = NamedTypes.begin(), I, E;
-  for (I = NamedTypes.begin(), E = NamedTypes.end(); I != E; ++I) {
-    StructType *STy = *I;
-
-    // Ignore anonymous types.
-    if (STy->isLiteral())
-      continue;
-
-    if (STy->getName().empty())
-      NumberedTypes[STy] = NextNumber++;
-    else
-      *NextToUse++ = STy;
-  }
-
-  NamedTypes.erase(NextToUse, NamedTypes.end());
-}
-
-
-/// CalcTypeName - Write the specified type to the specified raw_ostream, making
-/// use of type names or up references to shorten the type name where possible.
-void TypePrinting::print(Type *Ty, raw_ostream &OS) {
-  switch (Ty->getTypeID()) {
-  case Type::VoidTyID:      OS << "void"; break;
-  case Type::HalfTyID:      OS << "half"; break;
-  case Type::FloatTyID:     OS << "float"; break;
-  case Type::DoubleTyID:    OS << "double"; break;
-  case Type::X86_FP80TyID:  OS << "x86_fp80"; break;
-  case Type::FP128TyID:     OS << "fp128"; break;
-  case Type::PPC_FP128TyID: OS << "ppc_fp128"; break;
-  case Type::LabelTyID:     OS << "label"; break;
-  case Type::MetadataTyID:  OS << "metadata"; break;
-  case Type::X86_MMXTyID:   OS << "x86_mmx"; break;
-  case Type::IntegerTyID:
-    OS << 'i' << cast<IntegerType>(Ty)->getBitWidth();
-    return;
-
-  case Type::FunctionTyID: {
-    FunctionType *FTy = cast<FunctionType>(Ty);
-    print(FTy->getReturnType(), OS);
-    OS << " (";
-    for (FunctionType::param_iterator I = FTy->param_begin(),
-         E = FTy->param_end(); I != E; ++I) {
-      if (I != FTy->param_begin())
-        OS << ", ";
-      print(*I, OS);
-    }
-    if (FTy->isVarArg()) {
-      if (FTy->getNumParams()) OS << ", ";
-      OS << "...";
-    }
-    OS << ')';
-    return;
-  }
-  case Type::StructTyID: {
-    StructType *STy = cast<StructType>(Ty);
-
-    if (STy->isLiteral())
-      return printStructBody(STy, OS);
-
-    if (!STy->getName().empty())
-      return PrintLLVMName(OS, STy->getName(), LocalPrefix);
-
-    DenseMap<StructType*, unsigned>::iterator I = NumberedTypes.find(STy);
-    if (I != NumberedTypes.end())
-      OS << '%' << I->second;
-    else  // Not enumerated, print the hex address.
-      OS << "%\"type " << STy << '\"';
-    return;
-  }
-  case Type::PointerTyID: {
-    PointerType *PTy = cast<PointerType>(Ty);
-    print(PTy->getElementType(), OS);
-    if (unsigned AddressSpace = PTy->getAddressSpace())
-      OS << " addrspace(" << AddressSpace << ')';
-    OS << '*';
-    return;
-  }
-  case Type::ArrayTyID: {
-    ArrayType *ATy = cast<ArrayType>(Ty);
-    OS << '[' << ATy->getNumElements() << " x ";
-    print(ATy->getElementType(), OS);
-    OS << ']';
-    return;
-  }
-  case Type::VectorTyID: {
-    VectorType *PTy = cast<VectorType>(Ty);
-    OS << "<" << PTy->getNumElements() << " x ";
-    print(PTy->getElementType(), OS);
-    OS << '>';
-    return;
-  }
-  default:
-    OS << "<unrecognized-type>";
-    return;
-  }
-}
-
-void TypePrinting::printStructBody(StructType *STy, raw_ostream &OS) {
-  if (STy->isOpaque()) {
-    OS << "opaque";
-    return;
-  }
-
-  if (STy->isPacked())
-    OS << '<';
-
-  if (STy->getNumElements() == 0) {
-    OS << "{}";
-  } else {
-    StructType::element_iterator I = STy->element_begin();
-    OS << "{ ";
-    print(*I++, OS);
-    for (StructType::element_iterator E = STy->element_end(); I != E; ++I) {
-      OS << ", ";
-      print(*I, OS);
-    }
-
-    OS << " }";
-  }
-  if (STy->isPacked())
-    OS << '>';
-}
-
-
-
-//===----------------------------------------------------------------------===//
 // SlotTracker Class: Enumerate slot numbers for unnamed values
 //===----------------------------------------------------------------------===//
 
@@ -367,6 +205,8 @@ public:
     TheFunction = F;
     FunctionProcessed = false;
   }
+
+  void incorporateType(const Type *Ty);
 
   /// After calling incorporateFunction, use this method to remove the
   /// most recently incorporated function from the SlotTracker. This
@@ -468,6 +308,13 @@ inline void SlotTracker::initialize() {
     processFunction();
 }
 
+void SlotTracker::incorporateType(const Type *Ty) {
+  SmallVector<std::pair<unsigned, MDNode*>, 4> MDForType;
+  Ty->getAllMetadata(MDForType);
+  for (unsigned i = 0, e = MDForType.size(); i != e; ++i)
+    CreateMetadataSlot(MDForType[i].second);
+}
+
 // Iterate through all the global variables, functions, and global
 // variable initializers and create slots for them.
 void SlotTracker::processModule() {
@@ -488,6 +335,15 @@ void SlotTracker::processModule() {
     for (unsigned i = 0, e = NMD->getNumOperands(); i != e; ++i)
       CreateMetadataSlot(NMD->getOperand(i));
   }
+
+  // Add metadata used by types.
+  //for (Module::cons
+  //       I = TheModule->named_metadata_begin(),
+  //       E = TheModule->named_metadata_end(); I != E; ++I) {
+  //  const NamedMDNode *NMD = I;
+  //  for (unsigned i = 0, e = NMD->getNumOperands(); i != e; ++i)
+  //    CreateMetadataSlot(NMD->getOperand(i));
+  //}
 
   // Add all the unnamed functions to the table.
   for (Module::const_iterator I = TheModule->begin(), E = TheModule->end();
@@ -641,6 +497,214 @@ void SlotTracker::CreateMetadataSlot(const MDNode *N) {
     if (const MDNode *Op = dyn_cast_or_null<MDNode>(N->getOperand(i)))
       CreateMetadataSlot(Op);
 }
+
+//===----------------------------------------------------------------------===//
+// TypePrinting Class: Type printing machinery
+//===----------------------------------------------------------------------===//
+
+/// TypePrinting - Type printing machinery.
+namespace {
+class TypePrinting {
+  TypePrinting(const TypePrinting &) LLVM_DELETED_FUNCTION;
+  void operator=(const TypePrinting&) LLVM_DELETED_FUNCTION;
+public:
+
+  /// NamedTypes - The named types that are used by the current module.
+  TypeFinder NamedTypes;
+
+  /// NumberedTypes - The numbered types, along with their value.
+  DenseMap<StructType*, unsigned> NumberedTypes;
+
+  SlotTracker *Machine;
+  Module *TheModule;
+
+  TypePrinting() {}
+  ~TypePrinting() {}
+
+  void incorporateTypes(const Module &M);
+
+  void print(Type *Ty, raw_ostream &OS);
+
+  void printMetadata(Type *Ty, raw_ostream &OS);
+
+  void printStructBody(StructType *Ty, raw_ostream &OS);
+};
+} // end anonymous namespace.
+
+
+void TypePrinting::incorporateTypes(const Module &M) {
+  NamedTypes.run(M, false);
+
+  // The list of struct types we got back includes all the struct types, split
+  // the unnamed ones out to a numbering and remove the anonymous structs.
+  unsigned NextNumber = 0;
+
+  std::vector<StructType*>::iterator NextToUse = NamedTypes.begin(), I, E;
+  for (I = NamedTypes.begin(), E = NamedTypes.end(); I != E; ++I) {
+    StructType *STy = *I;
+
+    // Process metadata attached with this type.
+    Machine->incorporateType(STy);
+
+    // Ignore anonymous types.
+    if (STy->isLiteral())
+      continue;
+
+    if (STy->getName().empty())
+      NumberedTypes[STy] = NextNumber++;
+    else
+      *NextToUse++ = STy;
+  }
+
+  NamedTypes.erase(NextToUse, NamedTypes.end());
+
+  const Module::FunctionListType &FL = M.getFunctionList();
+  for (Module::const_iterator I = FL.begin(), E = FL.end(); I != E; ++I) {
+    const Function *F = I;
+    Machine->incorporateType(F->getFunctionType());
+  }
+}
+
+
+/// CalcTypeName - Write the specified type to the specified raw_ostream, making
+/// use of type names or up references to shorten the type name where possible.
+void TypePrinting::print(Type *Ty, raw_ostream &OS) {
+  switch (Ty->getTypeID()) {
+  case Type::VoidTyID:      OS << "void"; break;
+  case Type::HalfTyID:      OS << "half"; break;
+  case Type::FloatTyID:     OS << "float"; break;
+  case Type::DoubleTyID:    OS << "double"; break;
+  case Type::X86_FP80TyID:  OS << "x86_fp80"; break;
+  case Type::FP128TyID:     OS << "fp128"; break;
+  case Type::PPC_FP128TyID: OS << "ppc_fp128"; break;
+  case Type::LabelTyID:     OS << "label"; break;
+  case Type::MetadataTyID:  OS << "metadata"; break;
+  case Type::X86_MMXTyID:   OS << "x86_mmx"; break;
+  case Type::IntegerTyID:
+    OS << 'i' << cast<IntegerType>(Ty)->getBitWidth();
+    return;
+
+  case Type::FunctionTyID: {
+    FunctionType *FTy = cast<FunctionType>(Ty);
+    print(FTy->getReturnType(), OS);
+    OS << " (";
+    for (FunctionType::param_iterator I = FTy->param_begin(),
+         E = FTy->param_end(); I != E; ++I) {
+      if (I != FTy->param_begin())
+        OS << ", ";
+      print(*I, OS);
+    }
+    if (FTy->isVarArg()) {
+      if (FTy->getNumParams()) OS << ", ";
+      OS << "...";
+    }
+    OS << ')';
+    printMetadata(FTy, OS);
+    return;
+  }
+  case Type::StructTyID: {
+    StructType *STy = cast<StructType>(Ty);
+
+    if (STy->isLiteral())
+      return printStructBody(STy, OS);
+
+    if (!STy->getName().empty())
+      return PrintLLVMName(OS, STy->getName(), LocalPrefix);
+
+    DenseMap<StructType*, unsigned>::iterator I = NumberedTypes.find(STy);
+    if (I != NumberedTypes.end())
+      OS << '%' << I->second;
+    else  // Not enumerated, print the hex address.
+      OS << "%\"type " << STy << '\"';
+    return;
+  }
+  case Type::PointerTyID: {
+    PointerType *PTy = cast<PointerType>(Ty);
+    print(PTy->getElementType(), OS);
+    if (PTy->isManagedHandle()) {
+      OS << '^';
+      return;
+    }
+    if (unsigned AddressSpace = PTy->getAddressSpace())
+      OS << " addrspace(" << AddressSpace << ')';
+    OS << '*';
+    return;
+  }
+  case Type::ArrayTyID: {
+    ArrayType *ATy = cast<ArrayType>(Ty);
+    OS << '[' << ATy->getNumElements() << " x ";
+    print(ATy->getElementType(), OS);
+    OS << ']';
+    return;
+  }
+  case Type::VectorTyID: {
+    VectorType *PTy = cast<VectorType>(Ty);
+    OS << "<" << PTy->getNumElements() << " x ";
+    print(PTy->getElementType(), OS);
+    OS << '>';
+    return;
+  }
+  default:
+    OS << "<unrecognized-type>";
+    return;
+  }
+}
+
+static void WriteAsOperandInternal(raw_ostream &Out, const Value *V,
+                                   TypePrinting *TypePrinter,
+                                   SlotTracker *Machine,
+                                   const Module *Context);
+
+void TypePrinting::printMetadata(Type *Ty, raw_ostream &OS) {
+  // Print Metadata info.
+  SmallVector<std::pair<unsigned, MDNode*>, 4> TypeMD;
+  Ty->getAllMetadata(TypeMD);
+  if (!TypeMD.empty()) {
+    SmallVector<StringRef, 8> MDNames;
+    Ty->getContext().getMDKindNames(MDNames);
+    for (unsigned i = 0, e = TypeMD.size(); i != e; ++i) {
+      unsigned Kind = TypeMD[i].first;
+      if (Kind < MDNames.size()) {
+        OS << ", !" << MDNames[Kind];
+      } else {
+        OS << ", !<unknown kind #" << Kind << ">";
+      }
+      OS << ' ';
+      WriteAsOperandInternal(OS, TypeMD[i].second, this, Machine,
+                             TheModule);
+    }
+  }
+}
+
+void TypePrinting::printStructBody(StructType *STy, raw_ostream &OS) {
+  if (STy->isOpaque()) {
+    OS << "opaque";
+    printMetadata(STy, OS);
+    return;
+   }
+
+
+  if (STy->isPacked())
+    OS << '<';
+
+  if (STy->getNumElements() == 0) {
+    OS << "{}";
+  } else {
+    StructType::element_iterator I = STy->element_begin();
+    OS << "{ ";
+    print(*I++, OS);
+    for (StructType::element_iterator E = STy->element_end(); I != E; ++I) {
+      OS << ", ";
+      print(*I, OS);
+    }
+
+    OS << " }";
+  }
+  if (STy->isPacked())
+    OS << '>';
+}
+
+
 
 //===----------------------------------------------------------------------===//
 // AsmWriter Implementation
@@ -1173,6 +1237,9 @@ public:
                         const Module *M,
                         AssemblyAnnotationWriter *AAW)
     : Out(o), Machine(Mac), TheModule(M), AnnotationWriter(AAW) {
+    TypePrinter.TheModule = const_cast<Module *>(M);
+    TypePrinter.Machine = &Machine;
+
     if (M)
       TypePrinter.incorporateTypes(*M);
   }
@@ -1614,6 +1681,7 @@ void AssemblyWriter::printFunction(const Function *F) {
     Out << " align " << F->getAlignment();
   if (F->hasGC())
     Out << " gc \"" << F->getGC() << '"';
+  TypePrinter.printMetadata(FT, Out);
   if (F->isDeclaration()) {
     Out << '\n';
   } else {

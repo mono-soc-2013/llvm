@@ -45,6 +45,27 @@ bool LLParser::Run() {
 /// ValidateEndOfModule - Do final validity and sanity checks at the end of the
 /// module.
 bool LLParser::ValidateEndOfModule() {
+  // Handle any type metadata forward references.
+  if (!ForwardRefTypeMetadata.empty()) {
+    for (DenseMap<Type*, std::vector<MDRef> >::iterator
+         I = ForwardRefTypeMetadata.begin(), E = ForwardRefTypeMetadata.end();
+         I != E; ++I) {
+      Type *Ty = I->first;
+      const std::vector<MDRef> &MDList = I->second;
+      
+      for (unsigned i = 0, e = MDList.size(); i != e; ++i) {
+        unsigned SlotNo = MDList[i].MDSlot;
+        
+        if (SlotNo >= NumberedMetadata.size() || NumberedMetadata[SlotNo] == 0)
+          return Error(MDList[i].Loc, "use of undefined metadata '!" +
+                       Twine(SlotNo) + "'");
+        Ty->setMetadata(MDList[i].MDKind, NumberedMetadata[SlotNo]);
+      }
+    }
+    ForwardRefTypeMetadata.clear();
+  }
+
+
   // Handle any instruction metadata forward references.
   if (!ForwardRefInstMetadata.empty()) {
     for (DenseMap<Instruction*, std::vector<MDRef> >::iterator
@@ -1182,6 +1203,52 @@ bool LLParser::ParseInstructionMetadata(Instruction *Inst,
   return false;
 }
 
+/// ParseTypeMetadata
+///   ::= !dbg !42 (',' !dbg !57)*
+bool LLParser::ParseTypeMetadata(Type *Ty, PerFunctionState *PFS) {
+  do {
+    if (Lex.getKind() != lltok::MetadataVar)
+      return TokError("expected metadata after comma");
+
+    std::string Name = Lex.getStrVal();
+    unsigned MDK = M->getMDKindID(Name);
+    Lex.Lex();
+
+    MDNode *Node;
+    SMLoc Loc = Lex.getLoc();
+
+    if (ParseToken(lltok::exclaim, "expected '!' here"))
+      return true;
+
+    // This code is similar to that of ParseMetadataValue, however it needs to
+    // have special-case code for a forward reference; see the comments on
+    // ForwardRefInstMetadata for details. Also, MDStrings are not supported
+    // at the top level here.
+    if (Lex.getKind() == lltok::lbrace) {
+      ValID ID;
+      if (ParseMetadataListValue(ID, PFS))
+        return true;
+      assert(ID.Kind == ValID::t_MDNode);
+      Ty->setMetadata(MDK, ID.MDNodeVal);
+    } else {
+      unsigned NodeID = 0;
+      if (ParseMDNodeID(Node, NodeID))
+        return true;
+      if (Node) {
+        // If we got the node, add it to the instruction.
+        Ty->setMetadata(MDK, Node);
+      } else {
+        MDRef R = { Loc, MDK, NodeID };
+        // Otherwise, remember that this should be resolved later.
+        ForwardRefTypeMetadata[Ty].push_back(R);
+      }
+    }
+
+    // If this is the end of the list, we're done.
+  } while (EatIfPresent(lltok::comma));
+  return false;
+}
+
 /// ParseOptionalAlignment
 ///   ::= /* empty */
 ///   ::= 'align' 4
@@ -1582,6 +1649,12 @@ bool LLParser::ParseStructDefinition(SMLoc TypeLoc, StringRef Name,
     if (Entry.first == 0)
       Entry.first = StructType::create(Context, Name);
     ResultTy = Entry.first;
+
+    // Check to see if the type is followed by a comma and metadata.
+    if (EatIfPresent(lltok::comma))
+      if (ParseTypeMetadata(ResultTy, 0))
+        return true;
+
     return false;
   }
   
@@ -2784,6 +2857,11 @@ bool LLParser::ParseFunctionHeader(Function *&Fn, bool isDefine) {
   FunctionType *FT =
     FunctionType::get(RetType, ParamTypeList, isVarArg);
   PointerType *PFT = PointerType::getUnqual(FT);
+
+  // Check to see if the type is followed by a comma and metadata.
+  if (EatIfPresent(lltok::comma))
+    if (ParseTypeMetadata(FT, 0))
+      return true;
 
   Fn = 0;
   if (!FunctionName.empty()) {

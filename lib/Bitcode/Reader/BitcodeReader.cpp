@@ -717,6 +717,9 @@ bool BitcodeReader::ParseTypeTableBody() {
       else
         return Error("Invalid ARRAY type element");
       break;
+    case bitc::TYPE_CODE_METADATA_ATTACHMENT_ID:
+      ParseTypeMetadataAttachment();
+      break;
     }
 
     if (NumRecords >= TypeList.size())
@@ -1891,6 +1894,49 @@ bool BitcodeReader::ParseMetadataAttachment() {
           return Error("Invalid metadata kind ID");
         Value *Node = MDValueList.getValueFwdRef(Record[i+1]);
         Inst->setMetadata(I->second, cast<MDNode>(Node));
+      }
+      break;
+    }
+    }
+  }
+  return false;
+}
+
+/// ParseTypeMetadataAttachment - Parse metadata attachments.
+bool BitcodeReader::ParseTypeMetadataAttachment() {
+  if (Stream.EnterSubBlock(bitc::TYPE_CODE_METADATA_ATTACHMENT_ID))
+    return Error("Malformed block record");
+
+  SmallVector<uint64_t, 64> Record;
+  while(1) {
+    unsigned Code = Stream.ReadCode();
+    if (Code == bitc::END_BLOCK) {
+      if (Stream.ReadBlockEnd())
+        return Error("Error at end of PARAMATTR block");
+      break;
+    }
+    if (Code == bitc::DEFINE_ABBREV) {
+      Stream.ReadAbbrevRecord();
+      continue;
+    }
+    // Read a metadata attachment record.
+    Record.clear();
+    switch (Stream.ReadRecord(Code, Record)) {
+    default:  // Default behavior: ignore.
+      break;
+    case bitc::METADATA_ATTACHMENT: {
+      unsigned RecordLength = Record.size();
+      if (Record.empty() || (RecordLength - 1) % 2 == 1)
+        return Error ("Invalid METADATA_ATTACHMENT reader!");
+      Type *Ty = TypeList.back();
+      for (unsigned i = 1; i != RecordLength; i = i+2) {
+        unsigned Kind = Record[i];
+        DenseMap<unsigned, unsigned>::iterator I =
+          MDKindMap.find(Kind);
+        if (I == MDKindMap.end())
+          return Error("Invalid metadata kind ID");
+        Value *Node = MDValueList.getValueFwdRef(Record[i+1]);
+        Ty->setMetadata(I->second, cast<MDNode>(Node));
       }
       break;
     }

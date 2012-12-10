@@ -337,6 +337,10 @@ public:
   /// MetadataStore - Collection of per-instruction metadata used in this
   /// context.
   DenseMap<const Instruction *, MDMapTy> MetadataStore;
+
+  /// MetadataStore - Collection of per-instruction metadata used in this
+  /// context.
+  DenseMap<const Type *, MDMapTy> TypeMetadataStore;
   
   /// ScopeRecordIdx - This is the index in ScopeRecords for an MDNode scope
   /// entry with no "inlined at" element.

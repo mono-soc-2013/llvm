@@ -100,6 +100,11 @@ void TypeFinder::incorporateType(Type *Ty) {
     if (!OnlyNamed || STy->hasName())
       StructTypes.push_back(STy);
 
+  SmallVector<std::pair<unsigned, MDNode*>, 4> MDForType;
+  Ty->getAllMetadata(MDForType);
+  for (unsigned i = 0, e = MDForType.size(); i != e; ++i)
+    incorporateMDNode(MDForType[i].second);
+
   // Recursively walk all contained types.
   for (Type::subtype_iterator I = Ty->subtype_begin(),
          E = Ty->subtype_end(); I != E; ++I)

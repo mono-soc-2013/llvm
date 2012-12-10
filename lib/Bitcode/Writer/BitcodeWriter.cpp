@@ -187,6 +187,10 @@ static void WriteAttributeTable(const ValueEnumerator &VE,
   Stream.ExitBlock();
 }
 
+static void WriteTypeMetadataAttachment(const Type& Ty,
+                                        const ValueEnumerator &VE,
+                                        BitstreamWriter &Stream);
+
 /// WriteTypeTable - Write out the type table for a module.
 static void WriteTypeTable(const ValueEnumerator &VE, BitstreamWriter &Stream) {
   const ValueEnumerator::TypeList &TypeList = VE.getTypes();
@@ -339,6 +343,8 @@ static void WriteTypeTable(const ValueEnumerator &VE, BitstreamWriter &Stream) {
       break;
     }
     }
+
+    WriteTypeMetadataAttachment(*T, VE, Stream);
 
     // Emit the finished record.
     Stream.EmitRecord(Code, TypeVals, AbbrevToUse);
@@ -695,6 +701,28 @@ static void WriteMetadataAttachment(const Function &F,
       Record.clear();
     }
 
+  Stream.ExitBlock();
+}
+
+static void WriteTypeMetadataAttachment(const Type& Ty,
+                                        const ValueEnumerator &VE,
+                                        BitstreamWriter &Stream) {
+  // Write metadata attachments
+  // METADATA_ATTACHMENT - [m x [value, [n x [id, mdnode]]]
+  SmallVector<std::pair<unsigned, MDNode*>, 4> MDs;
+  Ty.getAllMetadata(MDs);
+
+  if (MDs.empty()) return;
+
+  Stream.EnterSubblock(bitc::TYPE_CODE_METADATA_ATTACHMENT_ID, 3);
+
+  SmallVector<uint64_t, 64> Record;
+  for (unsigned i = 0, e = MDs.size(); i != e; ++i) {
+    Record.push_back(MDs[i].first);
+    Record.push_back(VE.getValueID(MDs[i].second));
+  }
+
+  Stream.EmitRecord(bitc::METADATA_ATTACHMENT, Record, 0);
   Stream.ExitBlock();
 }
 
