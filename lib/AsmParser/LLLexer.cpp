@@ -250,6 +250,7 @@ lltok::Kind LLLexer::LexToken() {
   case ')': return lltok::rparen;
   case ',': return lltok::comma;
   case '*': return lltok::star;
+  case '^': return lltok::caret;
   case '\\': return lltok::backslash;
   }
 }

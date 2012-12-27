@@ -761,7 +761,7 @@ PointerType *PointerType::get(Type *EltTy, unsigned AddressSpace) {
 
 
 PointerType::PointerType(Type *E, unsigned AddrSpace)
-  : SequentialType(PointerTyID, E) {
+  : SequentialType(PointerTyID, E), IsManagedHandle(false) {
 #ifndef NDEBUG
   const unsigned oldNCT = NumContainedTys;
 #endif

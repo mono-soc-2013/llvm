@@ -1455,6 +1455,22 @@ bool LLParser::ParseType(Type *&Result, bool AllowVoid) {
       Lex.Lex();
       break;
 
+    // Type ::= Type '^'
+    case lltok::caret: {
+      if (Result->isLabelTy())
+        return TokError("basic block handles are invalid");
+      if (Result->isVoidTy())
+        return TokError("handle to void are invalid");
+      if (!PointerType::isValidElementType(Result))
+        return TokError("handle to this type is invalid");
+      PointerType *PTy = PointerType::getUnqual(Result);
+      PTy->setAsManagedHandle();
+      Result = PTy;
+
+      Lex.Lex();
+      break;
+    }
+
     // Type ::= Type 'addrspace' '(' uint32 ')' '*'
     case lltok::kw_addrspace: {
       if (Result->isLabelTy())
