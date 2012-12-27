@@ -102,8 +102,14 @@ namespace CallingConv {
     /// CIL_Instance - Calling convention used for CIL instance calls.
     CIL_Instance = 81,
 
-    /// CIL_NewObj - Calling convention used for CIL new object calls.
-    CIL_NewObj = 82
+    /// CIL_Virtual - Calling convention used for CIL virtual instance calls.
+    CIL_Virtual = 82,
+
+    /// CIL_NewObj - Calling convention used for CIL ref type object ctor calls.
+    CIL_NewObj = 83,
+
+    /// CIL_InitObj - Calling convention used for CIL value type object ctor calls.
+    CIL_InitObj = 84
   };
 } // End CallingConv namespace
 
