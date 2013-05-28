@@ -13,8 +13,8 @@
 
 #define DEBUG_TYPE "arm-selectiondag-info"
 #include "ARMTargetMachine.h"
-#include "llvm/DerivedTypes.h"
 #include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/IR/DerivedTypes.h"
 using namespace llvm;
 
 ARMSelectionDAGInfo::ARMSelectionDAGInfo(const TargetMachine &TM)
@@ -26,7 +26,7 @@ ARMSelectionDAGInfo::~ARMSelectionDAGInfo() {
 }
 
 SDValue
-ARMSelectionDAGInfo::EmitTargetCodeForMemcpy(SelectionDAG &DAG, DebugLoc dl,
+ARMSelectionDAGInfo::EmitTargetCodeForMemcpy(SelectionDAG &DAG, SDLoc dl,
                                              SDValue Chain,
                                              SDValue Dst, SDValue Src,
                                              SDValue Size, unsigned Align,
@@ -140,7 +140,7 @@ ARMSelectionDAGInfo::EmitTargetCodeForMemcpy(SelectionDAG &DAG, DebugLoc dl,
 // GNU library uses (ptr, value, size)
 // See RTABI section 4.3.4
 SDValue ARMSelectionDAGInfo::
-EmitTargetCodeForMemset(SelectionDAG &DAG, DebugLoc dl,
+EmitTargetCodeForMemset(SelectionDAG &DAG, SDLoc dl,
                         SDValue Chain, SDValue Dst,
                         SDValue Src, SDValue Size,
                         unsigned Align, bool isVolatile,
@@ -155,7 +155,7 @@ EmitTargetCodeForMemset(SelectionDAG &DAG, DebugLoc dl,
   TargetLowering::ArgListEntry Entry;
 
   // First argument: data pointer
-  Type *IntPtrTy = TLI.getTargetData()->getIntPtrType(*DAG.getContext());
+  Type *IntPtrTy = TLI.getDataLayout()->getIntPtrType(*DAG.getContext());
   Entry.Node = Dst;
   Entry.Ty = IntPtrTy;
   Args.push_back(Entry);

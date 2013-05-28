@@ -49,6 +49,9 @@ def ssub_0  : SubRegIndex;
 def ssub_1  : SubRegIndex;
 def ssub_2  : SubRegIndex<[dsub_1, ssub_0]>;
 def ssub_3  : SubRegIndex<[dsub_1, ssub_1]>;
+
+def gsub_0  : SubRegIndex;
+def gsub_1  : SubRegIndex;
 // Let TableGen synthesize the remaining 12 ssub_* indices.
 // We don't need to name them.
 }
@@ -154,12 +157,15 @@ def Q15 : ARMReg<15, "q15", [D30, D31]>;
 
 // Current Program Status Register.
 // We model fpscr with two registers: FPSCR models the control bits and will be
-// reserved. FPSCR_NZCV models the flag bits and will be unreserved. 
-def CPSR       : ARMReg<0, "cpsr">;
-def APSR       : ARMReg<1, "apsr">;
-def SPSR       : ARMReg<2, "spsr">;
-def FPSCR      : ARMReg<3, "fpscr">;
-def FPSCR_NZCV : ARMReg<3, "fpscr_nzcv"> {
+// reserved. FPSCR_NZCV models the flag bits and will be unreserved. APSR_NZCV
+// models the APSR when it's accessed by some special instructions. In such cases 
+// it has the same encoding as PC.
+def CPSR       : ARMReg<0,  "cpsr">;
+def APSR       : ARMReg<1,  "apsr">;
+def APSR_NZCV  : ARMReg<15, "apsr_nzcv">; 
+def SPSR       : ARMReg<2,  "spsr">;
+def FPSCR      : ARMReg<3,  "fpscr">;
+def FPSCR_NZCV : ARMReg<3,  "fpscr_nzcv"> {
   let Aliases = [FPSCR];
 }
 def ITSTATE    : ARMReg<4, "itstate">;
@@ -198,6 +204,16 @@ def GPR : RegisterClass<"ARM", [i32], 32, (add (sequence "R%u", 0, 12),
 // certain operand slots, particularly as the destination.  Primarily
 // useful for disassembly.
 def GPRnopc : RegisterClass<"ARM", [i32], 32, (sub GPR, PC)> {
+  let AltOrders = [(add LR, GPRnopc), (trunc GPRnopc, 8)];
+  let AltOrderSelect = [{
+      return 1 + MF.getTarget().getSubtarget<ARMSubtarget>().isThumb1Only();
+  }];
+}
+
+// GPRs without the PC but with APSR. Some instructions allow accessing the
+// APSR, while actually encoding PC in the register field. This is usefull
+// for assembly and disassembly only.
+def GPRwithAPSR : RegisterClass<"ARM", [i32], 32, (add GPR, APSR_NZCV)> {
   let AltOrders = [(add LR, GPRnopc), (trunc GPRnopc, 8)];
   let AltOrderSelect = [{
       return 1 + MF.getTarget().getSubtarget<ARMSubtarget>().isThumb1Only();
@@ -311,6 +327,17 @@ def DPair : RegisterClass<"ARM", [v16i8, v8i16, v4i32, v2i64, v4f32, v2f64],
   // Prefer even-odd pairs as they are easier to copy.
   let AltOrders = [(add (rotl QPR, 8), (rotl DPair, 16))];
   let AltOrderSelect = [{ return 1; }];
+}
+
+// Pseudo-registers representing even-odd pairs of GPRs from R1 to R13/SP.
+// These are needed by instructions (e.g. ldrexd/strexd) requiring even-odd GPRs.
+def Tuples2R : RegisterTuples<[gsub_0, gsub_1],
+                              [(add R0, R2, R4, R6, R8, R10, R12),
+                               (add R1, R3, R5, R7, R9, R11, SP)]>;
+
+// Register class representing a pair of even-odd GPRs.
+def GPRPair : RegisterClass<"ARM", [untyped], 64, (add Tuples2R)> {
+  let Size = 64; // 2 x 32 bits, we have no predefined type of that size.
 }
 
 // Pseudo-registers representing 3 consecutive D registers.

@@ -14,15 +14,15 @@
 #include "SparcFrameLowering.h"
 #include "SparcInstrInfo.h"
 #include "SparcMachineFunctionInfo.h"
-#include "llvm/Function.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/Target/TargetData.h"
-#include "llvm/Target/TargetOptions.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Target/TargetOptions.h"
 
 using namespace llvm;
 
@@ -37,18 +37,27 @@ void SparcFrameLowering::emitPrologue(MachineFunction &MF) const {
   // Get the number of bytes to allocate from the FrameInfo
   int NumBytes = (int) MFI->getStackSize();
 
-  // Emit the correct save instruction based on the number of bytes in
-  // the frame. Minimum stack frame size according to V8 ABI is:
-  //   16 words for register window spill
-  //    1 word for address of returned aggregate-value
-  // +  6 words for passing parameters on the stack
-  // ----------
-  //   23 words * 4 bytes per word = 92 bytes
-  NumBytes += 92;
+  if (SubTarget.is64Bit()) {
+    // All 64-bit stack frames must be 16-byte aligned, and must reserve space
+    // for spilling the 16 window registers at %sp+BIAS..%sp+BIAS+128.
+    NumBytes += 128;
+    // Frames with calls must also reserve space for 6 outgoing arguments
+    // whether they are used or not. LowerCall_64 takes care of that.
+    assert(NumBytes % 16 == 0 && "Stack size not 16-byte aligned");
+  } else {
+    // Emit the correct save instruction based on the number of bytes in
+    // the frame. Minimum stack frame size according to V8 ABI is:
+    //   16 words for register window spill
+    //    1 word for address of returned aggregate-value
+    // +  6 words for passing parameters on the stack
+    // ----------
+    //   23 words * 4 bytes per word = 92 bytes
+    NumBytes += 92;
 
-  // Round up to next doubleword boundary -- a double-word boundary
-  // is required by the ABI.
-  NumBytes = (NumBytes + 7) & ~7;
+    // Round up to next doubleword boundary -- a double-word boundary
+    // is required by the ABI.
+    NumBytes = RoundUpToAlignment(NumBytes, 8);
+  }
   NumBytes = -NumBytes;
 
   if (NumBytes >= -4096) {
@@ -67,6 +76,25 @@ void SparcFrameLowering::emitPrologue(MachineFunction &MF) const {
   }
 }
 
+void SparcFrameLowering::
+eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I) const {
+  if (!hasReservedCallFrame(MF)) {
+    MachineInstr &MI = *I;
+    DebugLoc DL = MI.getDebugLoc();
+    int Size = MI.getOperand(0).getImm();
+    if (MI.getOpcode() == SP::ADJCALLSTACKDOWN)
+      Size = -Size;
+    const SparcInstrInfo &TII =
+      *static_cast<const SparcInstrInfo*>(MF.getTarget().getInstrInfo());
+    if (Size)
+      BuildMI(MBB, I, DL, TII.get(SP::ADDri), SP::O6).addReg(SP::O6)
+        .addImm(Size);
+  }
+  MBB.erase(I);
+}
+
+
 void SparcFrameLowering::emitEpilogue(MachineFunction &MF,
                                   MachineBasicBlock &MBB) const {
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
@@ -78,3 +106,18 @@ void SparcFrameLowering::emitEpilogue(MachineFunction &MF,
   BuildMI(MBB, MBBI, dl, TII.get(SP::RESTORErr), SP::G0).addReg(SP::G0)
     .addReg(SP::G0);
 }
+
+bool SparcFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
+  //Reserve call frame if there are no variable sized objects on the stack
+  return !MF.getFrameInfo()->hasVarSizedObjects();
+}
+
+// hasFP - Return true if the specified function should have a dedicated frame
+// pointer register.  This is true if the function has variable sized allocas or
+// if frame pointer elimination is disabled.
+bool SparcFrameLowering::hasFP(const MachineFunction &MF) const {
+  const MachineFrameInfo *MFI = MF.getFrameInfo();
+  return MF.getTarget().Options.DisableFramePointerElim(MF) ||
+    MFI->hasVarSizedObjects() || MFI->isFrameAddressTaken();
+}
+

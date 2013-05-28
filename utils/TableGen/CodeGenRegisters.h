@@ -16,17 +16,17 @@
 #define CODEGEN_REGISTERS_H
 
 #include "SetTheory.h"
-#include "llvm/TableGen/Record.h"
-#include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/TableGen/Record.h"
 #include <cstdlib>
 #include <map>
-#include <string>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace llvm {
@@ -41,6 +41,10 @@ namespace llvm {
   public:
     const unsigned EnumValue;
     unsigned LaneMask;
+
+    // Are all super-registers containing this SubRegIndex covered by their
+    // sub-registers?
+    bool AllSuperRegsCovered;
 
     CodeGenSubRegIndex(Record *R, unsigned Enum);
     CodeGenSubRegIndex(StringRef N, StringRef Nspace, unsigned Enum);
@@ -261,7 +265,7 @@ namespace llvm {
   public:
     unsigned EnumValue;
     std::string Namespace;
-    std::vector<MVT::SimpleValueType> VTs;
+    SmallVector<MVT::SimpleValueType, 4> VTs;
     unsigned SpillSize;
     unsigned SpillAlignment;
     int CopyCost;
@@ -274,7 +278,7 @@ namespace llvm {
 
     const std::string &getName() const { return Name; }
     std::string getQualifiedName() const;
-    const std::vector<MVT::SimpleValueType> &getValueTypes() const {return VTs;}
+    ArrayRef<MVT::SimpleValueType> getValueTypes() const {return VTs;}
     unsigned getNumValueTypes() const { return VTs.size(); }
 
     MVT::SimpleValueType getValueTypeNum(unsigned VTNum) const {
@@ -403,7 +407,11 @@ namespace llvm {
     // these two registers and their super-registers.
     const CodeGenRegister *Roots[2];
 
-    RegUnit() : Weight(0) { Roots[0] = Roots[1] = 0; }
+    // Index into RegClassUnitSets where we can find the list of UnitSets that
+    // contain this unit.
+    unsigned RegClassUnitSetsIdx;
+
+    RegUnit() : Weight(0), RegClassUnitSetsIdx(0) { Roots[0] = Roots[1] = 0; }
 
     ArrayRef<const CodeGenRegister*> getRoots() const {
       assert(!(Roots[1] && !Roots[0]) && "Invalid roots array");
@@ -462,6 +470,10 @@ namespace llvm {
 
     // Map RegisterClass index to the index of the RegUnitSet that contains the
     // class's units and any inferred RegUnit supersets.
+    //
+    // NOTE: This could grow beyond the number of register classes when we map
+    // register units to lists of unit sets. If the list of unit sets does not
+    // already exist for a register class, we create a new entry in this vector.
     std::vector<std::vector<unsigned> > RegClassUnitSets;
 
     // Add RC to *2RC maps.
@@ -615,6 +627,13 @@ namespace llvm {
       return RegUnitSets[Idx];
     }
 
+    // The number of pressure set lists may be larget than the number of
+    // register classes if some register units appeared in a list of sets that
+    // did not correspond to an existing register class.
+    unsigned getNumRegClassPressureSetLists() const {
+      return RegClassUnitSets.size();
+    }
+
     // Get a list of pressure set IDs for a register class. Liveness of a
     // register in this class impacts each pressure set in this list by the
     // weight of the register. An exact solution requires all registers in a
@@ -634,6 +653,11 @@ namespace llvm {
     // This is used to compute the mask of call-preserved registers from a list
     // of callee-saves.
     BitVector computeCoveredRegisters(ArrayRef<Record*> Regs);
+
+    // Bit mask of lanes that cover their registers. A sub-register index whose
+    // LaneMask is contained in CoveringLanes will be completely covered by
+    // another sub-register with the same or larger lane mask.
+    unsigned CoveringLanes;
   };
 }
 

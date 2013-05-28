@@ -12,10 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MBlaze.h"
 #include "MBlazeDisassembler.h"
-
-#include "llvm/MC/EDInstInfo.h"
+#include "MBlaze.h"
 #include "llvm/MC/MCDisassembler.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrDesc.h"
@@ -26,7 +24,6 @@
 
 // #include "MBlazeGenDecoderTables.inc"
 // #include "MBlazeGenRegisterNames.inc"
-#include "MBlazeGenEDInfo.inc"
 
 namespace llvm {
 extern const MCInstrDesc MBlazeInsts[];
@@ -492,10 +489,6 @@ static unsigned getOPCODE(uint32_t insn) {
   }
 }
 
-const EDInstInfo *MBlazeDisassembler::getEDInfo() const {
-  return instInfoMBlaze;
-}
-
 //
 // Public interface for the disassembler
 //
@@ -508,14 +501,13 @@ MCDisassembler::DecodeStatus MBlazeDisassembler::getInstruction(MCInst &instr,
                                         raw_ostream &cStream) const {
   // The machine instruction.
   uint32_t insn;
-  uint64_t read;
   uint8_t bytes[4];
 
   // By default we consume 1 byte on failure
   size = 1;
 
   // We want to read exactly 4 bytes of data.
-  if (region.readBytes(address, 4, (uint8_t*)bytes, &read) == -1 || read < 4)
+  if (region.readBytes(address, 4, bytes) == -1)
     return Fail;
 
   // Encoded as a big-endian 32-bit word in the stream.

@@ -10,7 +10,7 @@ define zeroext i8 @t1(float %x, float %y) nounwind {
 ; CHECK: fcmp oeq float %x, %y
 ; CHECK-NOT: fcmp ueq float %x, %y
 ; CHECK-NOT: fcmp ord float %x, %y
-; CHECK-NOW: and
+; CHECK-NOT: and
 }
 
 define zeroext i8 @t2(float %x, float %y) nounwind {
@@ -76,4 +76,25 @@ define zeroext i8 @t7(float %x, float %y) nounwind {
 ; CHECK: t7
 ; CHECK: fcmp uno
 ; CHECK-NOT: fcmp ult
+}
+
+; PR15737
+define i1 @t8(float %a, double %b) {
+  %cmp = fcmp ord float %a, 0.000000e+00
+  %cmp1 = fcmp ord double %b, 0.000000e+00
+  %and = and i1 %cmp, %cmp1
+  ret i1 %and
+; CHECK: t8
+; CHECK: fcmp ord
+; CHECK: fcmp ord
+}
+
+define <2 x i1> @t9(<2 x float> %a, <2 x double> %b) {
+  %cmp = fcmp ord <2 x float> %a, zeroinitializer
+  %cmp1 = fcmp ord <2 x double> %b, zeroinitializer
+  %and = and <2 x i1> %cmp, %cmp1
+  ret <2 x i1> %and
+; CHECK: t9
+; CHECK: fcmp ord
+; CHECK: fcmp ord
 }

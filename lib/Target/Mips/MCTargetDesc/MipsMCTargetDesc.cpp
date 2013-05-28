@@ -11,15 +11,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MipsMCAsmInfo.h"
+#include "MCTargetDesc/MipsELFStreamer.h"
 #include "MipsMCTargetDesc.h"
 #include "InstPrinter/MipsInstPrinter.h"
-#include "llvm/MC/MachineLocation.h"
+#include "MipsMCAsmInfo.h"
 #include "llvm/MC/MCCodeGenInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
+#include "llvm/MC/MachineLocation.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
 
@@ -92,12 +93,12 @@ static MCSubtargetInfo *createMipsMCSubtargetInfo(StringRef TT, StringRef CPU,
   return X;
 }
 
-static MCAsmInfo *createMipsMCAsmInfo(const Target &T, StringRef TT) {
-  MCAsmInfo *MAI = new MipsMCAsmInfo(T, TT);
+static MCAsmInfo *createMipsMCAsmInfo(const MCRegisterInfo &MRI, StringRef TT) {
+  MCAsmInfo *MAI = new MipsMCAsmInfo(TT);
 
-  MachineLocation Dst(MachineLocation::VirtualFP);
-  MachineLocation Src(Mips::SP, 0);
-  MAI->addInitialFrameState(0, Dst, Src);
+  unsigned SP = MRI.getDwarfRegNum(Mips::SP, true);
+  MCCFIInstruction Inst = MCCFIInstruction::createDefCfa(0, SP, 0);
+  MAI->addInitialFrameState(Inst);
 
   return MAI;
 }
@@ -131,7 +132,7 @@ static MCStreamer *createMCStreamer(const Target &T, StringRef TT,
                                     bool NoExecStack) {
   Triple TheTriple(TT);
 
-  return createELFStreamer(Ctx, MAB, _OS, _Emitter, RelaxAll, NoExecStack);
+  return createMipsELFStreamer(Ctx, MAB, _OS, _Emitter, RelaxAll, NoExecStack);
 }
 
 extern "C" void LLVMInitializeMipsTargetMC() {

@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_ADT_OWNING_PTR_H
-#define LLVM_ADT_OWNING_PTR_H
+#ifndef LLVM_ADT_OWNINGPTR_H
+#define LLVM_ADT_OWNINGPTR_H
 
 #include "llvm/Support/Compiler.h"
 #include <cassert>
@@ -31,6 +31,15 @@ class OwningPtr {
   T *Ptr;
 public:
   explicit OwningPtr(T *P = 0) : Ptr(P) {}
+
+#if LLVM_HAS_RVALUE_REFERENCES
+  OwningPtr(OwningPtr &&Other) : Ptr(Other.take()) {}
+
+  OwningPtr &operator=(OwningPtr &&Other) {
+    reset(Other.take());
+    return *this;
+  }
+#endif
 
   ~OwningPtr() {
     delete Ptr;
@@ -61,8 +70,9 @@ public:
 
   T *operator->() const { return Ptr; }
   T *get() const { return Ptr; }
-  operator bool() const { return Ptr != 0; }
+  LLVM_EXPLICIT operator bool() const { return Ptr != 0; }
   bool operator!() const { return Ptr == 0; }
+  bool isValid() const { return Ptr != 0; }
 
   void swap(OwningPtr &RHS) {
     T *Tmp = RHS.Ptr;
@@ -85,6 +95,15 @@ class OwningArrayPtr {
   T *Ptr;
 public:
   explicit OwningArrayPtr(T *P = 0) : Ptr(P) {}
+
+#if LLVM_HAS_RVALUE_REFERENCES
+  OwningArrayPtr(OwningArrayPtr &&Other) : Ptr(Other.take()) {}
+
+  OwningArrayPtr &operator=(OwningArrayPtr &&Other) {
+    reset(Other.take());
+    return *this;
+  }
+#endif
 
   ~OwningArrayPtr() {
     delete [] Ptr;
@@ -114,7 +133,7 @@ public:
   }
 
   T *get() const { return Ptr; }
-  operator bool() const { return Ptr != 0; }
+  LLVM_EXPLICIT operator bool() const { return Ptr != 0; }
   bool operator!() const { return Ptr == 0; }
 
   void swap(OwningArrayPtr &RHS) {

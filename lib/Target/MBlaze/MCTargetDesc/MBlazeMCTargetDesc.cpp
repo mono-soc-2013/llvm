@@ -12,8 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "MBlazeMCTargetDesc.h"
-#include "MBlazeMCAsmInfo.h"
 #include "InstPrinter/MBlazeInstPrinter.h"
+#include "MBlazeMCAsmInfo.h"
 #include "llvm/MC/MCCodeGenInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
@@ -53,7 +53,7 @@ static MCSubtargetInfo *createMBlazeMCSubtargetInfo(StringRef TT, StringRef CPU,
   return X;
 }
 
-static MCAsmInfo *createMCAsmInfo(const Target &T, StringRef TT) {
+static MCAsmInfo *createMCAsmInfo(const MCRegisterInfo &MRI, StringRef TT) {
   Triple TheTriple(TT);
   switch (TheTriple.getOS()) {
   default:

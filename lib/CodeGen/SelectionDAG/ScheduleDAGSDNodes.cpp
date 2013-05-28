@@ -13,26 +13,26 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "pre-RA-sched"
-#include "SDNodeDbgValue.h"
 #include "ScheduleDAGSDNodes.h"
 #include "InstrEmitter.h"
-#include "llvm/CodeGen/SelectionDAG.h"
-#include "llvm/CodeGen/MachineInstrBuilder.h"
-#include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/MC/MCInstrItineraries.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetInstrInfo.h"
-#include "llvm/Target/TargetLowering.h"
-#include "llvm/Target/TargetRegisterInfo.h"
-#include "llvm/Target/TargetSubtargetInfo.h"
+#include "SDNodeDbgValue.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/MC/MCInstrItineraries.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetInstrInfo.h"
+#include "llvm/Target/TargetLowering.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetRegisterInfo.h"
+#include "llvm/Target/TargetSubtargetInfo.h"
 using namespace llvm;
 
 STATISTIC(LoadsClustered, "Number of loads clustered together");
@@ -485,14 +485,15 @@ void ScheduleDAGSDNodes::AddSchedEdges() {
         if(isChain && OpN->getOpcode() == ISD::TokenFactor)
           OpLatency = 0;
 
-        const SDep &dep = SDep(OpSU, isChain ? SDep::Order : SDep::Data,
-                               OpLatency, PhysReg);
+        SDep Dep = isChain ? SDep(OpSU, SDep::Barrier)
+          : SDep(OpSU, SDep::Data, PhysReg);
+        Dep.setLatency(OpLatency);
         if (!isChain && !UnitLatencies) {
-          computeOperandLatency(OpN, N, i, const_cast<SDep &>(dep));
-          ST.adjustSchedDependency(OpSU, SU, const_cast<SDep &>(dep));
+          computeOperandLatency(OpN, N, i, Dep);
+          ST.adjustSchedDependency(OpSU, SU, Dep);
         }
 
-        if (!SU->addPred(dep) && !dep.isCtrl() && OpSU->NumRegDefsLeft > 1) {
+        if (!SU->addPred(Dep) && !Dep.isCtrl() && OpSU->NumRegDefsLeft > 1) {
           // Multiple register uses are combined in the same SUnit. For example,
           // we could have a set of glued nodes with all their defs consumed by
           // another set of glued nodes. Register pressure tracking sees this as
@@ -561,7 +562,7 @@ void ScheduleDAGSDNodes::RegDefIter::Advance() {
     for (;DefIdx < NodeNumDefs; ++DefIdx) {
       if (!Node->hasAnyUseOfValue(DefIdx))
         continue;
-      ValueType = Node->getValueType(DefIdx);
+      ValueType = Node->getSimpleValueType(DefIdx);
       ++DefIdx;
       return; // Found a normal regdef.
     }
@@ -735,7 +736,7 @@ static void ProcessSourceNode(SDNode *N, SelectionDAG *DAG,
                            DenseMap<SDValue, unsigned> &VRBaseMap,
                     SmallVector<std::pair<unsigned, MachineInstr*>, 32> &Orders,
                            SmallSet<unsigned, 8> &Seen) {
-  unsigned Order = DAG->GetOrdering(N);
+  unsigned Order = N->getIROrder();
   if (!Order || !Seen.insert(Order)) {
     // Process any valid SDDbgValues even if node does not have any order
     // assigned.
@@ -831,8 +832,7 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
     }
 
     SmallVector<SDNode *, 4> GluedNodes;
-    for (SDNode *N = SU->getNode()->getGluedNode(); N;
-         N = N->getGluedNode())
+    for (SDNode *N = SU->getNode()->getGluedNode(); N; N = N->getGluedNode())
       GluedNodes.push_back(N);
     while (!GluedNodes.empty()) {
       SDNode *N = GluedNodes.back();
@@ -883,7 +883,7 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
             // Insert at the instruction, which may be in a different
             // block, if the block was split by a custom inserter.
             MachineBasicBlock::iterator Pos = MI;
-            MI->getParent()->insert(llvm::next(Pos), DbgMI);
+            MI->getParent()->insert(Pos, DbgMI);
           }
         }
       }

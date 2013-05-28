@@ -17,7 +17,7 @@
 #define LLVM_CODEGEN_ASMPRINTER_H
 
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/InlineAsm.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 
@@ -25,6 +25,7 @@ namespace llvm {
   class BlockAddress;
   class GCStrategy;
   class Constant;
+  class ConstantArray;
   class GCMetadataPrinter;
   class GlobalValue;
   class GlobalVariable;
@@ -37,8 +38,8 @@ namespace llvm {
   class MachineConstantPoolValue;
   class MachineJumpTableInfo;
   class MachineModuleInfo;
-  class MachineMove;
   class MCAsmInfo;
+  class MCCFIInstruction;
   class MCContext;
   class MCSection;
   class MCStreamer;
@@ -48,7 +49,7 @@ namespace llvm {
   class DwarfException;
   class Mangler;
   class TargetLoweringObjectFile;
-  class TargetData;
+  class DataLayout;
   class TargetMachine;
 
   /// AsmPrinter - This class is intended to be used as a driving class for all
@@ -131,8 +132,11 @@ namespace llvm {
     /// getObjFileLowering - Return information about object file lowering.
     const TargetLoweringObjectFile &getObjFileLowering() const;
 
-    /// getTargetData - Return information about data layout.
-    const TargetData &getTargetData() const;
+    /// getDataLayout - Return information about data layout.
+    const DataLayout &getDataLayout() const;
+
+    /// getTargetTriple - Return the target triple string.
+    StringRef getTargetTriple() const;
 
     /// getCurrentSection() - Return the current section we are emitting to.
     const MCSection *getCurrentSection() const;
@@ -385,10 +389,8 @@ namespace llvm {
     /// GetSizeOfEncodedValue - Return the size of the encoding in bytes.
     unsigned GetSizeOfEncodedValue(unsigned Encoding) const;
 
-    /// EmitReference - Emit a reference to a label with a specified encoding.
-    ///
-    void EmitReference(const MCSymbol *Sym, unsigned Encoding) const;
-    void EmitReference(const GlobalValue *GV, unsigned Encoding) const;
+    /// EmitReference - Emit reference to a ttype global with a specified encoding.
+    void EmitTTypeReference(const GlobalValue *GV, unsigned Encoding) const;
 
     /// EmitSectionOffset - Emit the 4-byte offset of Label from the start of
     /// its section.  This can be done with a special directive if the target
@@ -415,9 +417,8 @@ namespace llvm {
     // Dwarf Lowering Routines
     //===------------------------------------------------------------------===//
 
-    /// EmitCFIFrameMove - Emit frame instruction to describe the layout of the
-    /// frame.
-    void EmitCFIFrameMove(const MachineMove &Move) const;
+    /// \brief Emit frame instruction to describe the layout of the frame.
+    void emitCFIInstruction(const MCCFIInstruction &Inst) const;
 
     //===------------------------------------------------------------------===//
     // Inline Asm Support
@@ -482,7 +483,7 @@ namespace llvm {
     void EmitJumpTableEntry(const MachineJumpTableInfo *MJTI,
                             const MachineBasicBlock *MBB,
                             unsigned uid) const;
-    void EmitLLVMUsedList(const Constant *List);
+    void EmitLLVMUsedList(const ConstantArray *InitList);
     void EmitXXStructorList(const Constant *List, bool isCtor);
     GCMetadataPrinter *GetOrCreateGCPrinter(GCStrategy *C);
   };

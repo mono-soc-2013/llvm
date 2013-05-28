@@ -19,32 +19,34 @@
 
 namespace llvm {
 
-/// Triple - Helper class for working with target triples.
+/// Triple - Helper class for working with autoconf configuration names. For
+/// historical reasons, we also call these 'triples' (they used to contain
+/// exactly three fields).
 ///
-/// Target triples are strings in the canonical form:
+/// Configuration names are strings in the canonical form:
 ///   ARCHITECTURE-VENDOR-OPERATING_SYSTEM
 /// or
 ///   ARCHITECTURE-VENDOR-OPERATING_SYSTEM-ENVIRONMENT
 ///
 /// This class is used for clients which want to support arbitrary
-/// target triples, but also want to implement certain special
-/// behavior for particular targets. This class isolates the mapping
-/// from the components of the target triple to well known IDs.
+/// configuration names, but also want to implement certain special
+/// behavior for particular configurations. This class isolates the mapping
+/// from the components of the configuration name to well known IDs.
 ///
 /// At its core the Triple class is designed to be a wrapper for a triple
 /// string; the constructor does not change or normalize the triple string.
 /// Clients that need to handle the non-canonical triples that users often
 /// specify should use the normalize method.
 ///
-/// See autoconf/config.guess for a glimpse into what triples look like in
-/// practice.
+/// See autoconf/config.guess for a glimpse into what configuration names
+/// look like in practice.
 class Triple {
 public:
   enum ArchType {
     UnknownArch,
 
-    arm,     // ARM; arm, armv.*, xscale
-    cellspu, // CellSPU: spu, cellspu
+    arm,     // ARM: arm, armv.*, xscale
+    aarch64, // AArch64: aarch64
     cil,     // CIL: Common Intermediate Language
     hexagon, // Hexagon: hexagon
     mips,    // MIPS: mips, mipsallegrex
@@ -57,6 +59,7 @@ public:
     r600,    // R600: AMD GPUs HD2XXX - HD6XXX
     sparc,   // Sparc: sparc
     sparcv9, // Sparcv9: Sparcv9
+    systemz, // SystemZ: s390x
     tce,     // TCE (http://tce.cs.tut.fi/): tce
     thumb,   // Thumb: thumb, thumbv.*
     x86,     // X86: i[3-9]86
@@ -66,7 +69,9 @@ public:
     nvptx,   // NVPTX: 32-bit
     nvptx64, // NVPTX: 64-bit
     le32,    // le32: generic little-endian 32-bit CPU (PNaCl / Emscripten)
-    amdil   // amdil: amd IL
+    amdil,   // amdil: amd IL
+    spir,    // SPIR: standard portable IR for OpenCL 32-bit version
+    spir64   // SPIR: standard portable IR for OpenCL 64-bit version
   };
   enum VendorType {
     UnknownVendor,
@@ -76,7 +81,8 @@ public:
     SCEI,
     BGP,
     BGQ,
-    Freescale
+    Freescale,
+    IBM
   };
   enum OSType {
     UnknownOS,
@@ -99,9 +105,10 @@ public:
     Haiku,
     Minix,
     RTEMS,
-    NativeClient,
-    CNK,         // BG/P Compute-Node Kernel
-    Bitrig
+    NaCl,       // Native Client
+    CNK,        // BG/P Compute-Node Kernel
+    Bitrig,
+    AIX
   };
   enum EnvironmentType {
     UnknownEnvironment,
@@ -109,9 +116,11 @@ public:
     GNU,
     GNUEABI,
     GNUEABIHF,
+    GNUX32,
     EABI,
     MachO,
-    Android
+    Android,
+    ELF
   };
 
 private:
@@ -292,9 +301,14 @@ public:
     return getOS() == Triple::Darwin || getOS() == Triple::MacOSX;
   }
 
+  /// Is this an iOS triple.
+  bool isiOS() const {
+    return getOS() == Triple::IOS;
+  }
+
   /// isOSDarwin - Is this a "Darwin" OS (OS X or iOS).
   bool isOSDarwin() const {
-    return isMacOSX() || getOS() == Triple::IOS;
+    return isMacOSX() || isiOS();
   }
 
   /// \brief Tests for either Cygwin or MinGW OS
@@ -305,6 +319,11 @@ public:
   /// isOSWindows - Is this a "Windows" OS.
   bool isOSWindows() const {
     return getOS() == Triple::Win32 || isOSCygMing();
+  }
+
+  /// \brief Tests whether the OS is NaCl (Native Client)
+  bool isOSNaCl() const {
+    return getOS() == Triple::NaCl;
   }
 
   /// \brief Tests whether the OS uses the ELF binary format.
@@ -422,11 +441,6 @@ public:
   /// getArchTypeForLLVMName - The canonical type for the given LLVM
   /// architecture name (e.g., "x86").
   static ArchType getArchTypeForLLVMName(StringRef Str);
-
-  /// getArchTypeForDarwinArchName - Get the architecture type for a "Darwin"
-  /// architecture name, for example as accepted by "gcc -arch" (see also
-  /// arch(3)).
-  static ArchType getArchTypeForDarwinArchName(StringRef Str);
 
   /// @}
 };

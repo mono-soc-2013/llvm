@@ -11,12 +11,12 @@
 #include "ARM.h"
 #include "ARMMachineFunctionInfo.h"
 #include "Thumb2InstrInfo.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/ADT/SmallSet.h"
-#include "llvm/ADT/Statistic.h"
 using namespace llvm;
 
 STATISTIC(NumITs,        "Number of IT blocks inserted");
@@ -73,15 +73,15 @@ static void TrackDefUses(MachineInstr *MI,
 
   for (unsigned i = 0, e = LocalUses.size(); i != e; ++i) {
     unsigned Reg = LocalUses[i];
-    Uses.insert(Reg);
-    for (MCSubRegIterator Subreg(Reg, TRI); Subreg.isValid(); ++Subreg)
+    for (MCSubRegIterator Subreg(Reg, TRI, /*IncludeSelf=*/true);
+         Subreg.isValid(); ++Subreg)
       Uses.insert(*Subreg);
   }
 
   for (unsigned i = 0, e = LocalDefs.size(); i != e; ++i) {
     unsigned Reg = LocalDefs[i];
-    Defs.insert(Reg);
-    for (MCSubRegIterator Subreg(Reg, TRI); Subreg.isValid(); ++Subreg)
+    for (MCSubRegIterator Subreg(Reg, TRI, /*IncludeSelf=*/true);
+         Subreg.isValid(); ++Subreg)
       Defs.insert(*Subreg);
     if (Reg == ARM::CPSR)
       continue;

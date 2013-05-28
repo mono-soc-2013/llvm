@@ -15,17 +15,17 @@
 #include "BugDriver.h"
 #include "ListReducer.h"
 #include "ToolRunner.h"
-#include "llvm/Constants.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/Instructions.h"
-#include "llvm/Linker.h"
-#include "llvm/Module.h"
-#include "llvm/Pass.h"
 #include "llvm/Analysis/Verifier.h"
-#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Config/config.h"   // for HAVE_LINK_R
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Linker.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
-#include "llvm/Config/config.h"   // for HAVE_LINK_R
+#include "llvm/Transforms/Utils/Cloning.h"
 using namespace llvm;
 
 namespace llvm {
@@ -130,7 +130,7 @@ ReduceMiscompilingPasses::doTest(std::vector<std::string> &Prefix,
   //
   OwningPtr<Module> PrefixOutput(ParseInputFile(BitcodeResult,
                                                 BD.getContext()));
-  if (PrefixOutput == 0) {
+  if (!PrefixOutput) {
     errs() << BD.getToolName() << ": Error reading bitcode file '"
            << BitcodeResult << "'!\n";
     exit(1);

@@ -13,15 +13,15 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "dwarfehprepare"
-#include "llvm/Function.h"
-#include "llvm/Instructions.h"
-#include "llvm/IntrinsicInst.h"
-#include "llvm/Module.h"
-#include "llvm/Pass.h"
+#include "llvm/CodeGen/Passes.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/Dominators.h"
-#include "llvm/CodeGen/Passes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/CallSite.h"
 #include "llvm/Target/TargetLowering.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -32,8 +32,7 @@ STATISTIC(NumResumesLowered, "Number of resume calls lowered");
 
 namespace {
   class DwarfEHPrepare : public FunctionPass {
-    const TargetMachine *TM;
-    const TargetLowering *TLI;
+    const TargetLoweringBase *TLI;
 
     // RewindFunction - _Unwind_Resume or the target equivalent.
     Constant *RewindFunction;
@@ -43,9 +42,8 @@ namespace {
 
   public:
     static char ID; // Pass identification, replacement for typeid.
-    DwarfEHPrepare(const TargetMachine *tm) :
-      FunctionPass(ID), TM(tm), TLI(TM->getTargetLowering()),
-      RewindFunction(0) {
+    DwarfEHPrepare(const TargetLoweringBase *TLI) :
+      FunctionPass(ID), TLI(TLI), RewindFunction(0) {
         initializeDominatorTreePass(*PassRegistry::getPassRegistry());
       }
 
@@ -61,8 +59,8 @@ namespace {
 
 char DwarfEHPrepare::ID = 0;
 
-FunctionPass *llvm::createDwarfEHPass(const TargetMachine *tm) {
-  return new DwarfEHPrepare(tm);
+FunctionPass *llvm::createDwarfEHPass(const TargetLoweringBase *TLI) {
+  return new DwarfEHPrepare(TLI);
 }
 
 /// GetExceptionObject - Return the exception object from the value passed into

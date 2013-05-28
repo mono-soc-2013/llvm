@@ -14,12 +14,12 @@
 #ifndef SELECTIONDAGBUILDER_H
 #define SELECTIONDAGBUILDER_H
 
-#include "llvm/Constants.h"
-#include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/SelectionDAGNodes.h"
 #include "llvm/CodeGen/ValueTypes.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <vector>
@@ -66,7 +66,7 @@ class ShuffleVectorInst;
 class SIToFPInst;
 class StoreInst;
 class SwitchInst;
-class TargetData;
+class DataLayout;
 class TargetLibraryInfo;
 class TargetLowering;
 class TruncInst;
@@ -80,8 +80,8 @@ class ZExtInst;
 /// implementation that is parameterized by a TargetLowering object.
 ///
 class SelectionDAGBuilder {
-  /// CurDebugLoc - current file + line number.  Changes as we build the DAG.
-  DebugLoc CurDebugLoc;
+  /// CurInst - The current instruction being visited
+  const Instruction *CurInst;
 
   DenseMap<const Value*, SDValue> NodeMap;
   
@@ -262,7 +262,7 @@ private:
 
   struct BitTestBlock {
     BitTestBlock(APInt F, APInt R, const Value* SV,
-                 unsigned Rg, EVT RgVT, bool E,
+                 unsigned Rg, MVT RgVT, bool E,
                  MachineBasicBlock* P, MachineBasicBlock* D,
                  const BitTestInfo& C):
       First(F), Range(R), SValue(SV), Reg(Rg), RegVT(RgVT), Emitted(E),
@@ -271,7 +271,7 @@ private:
     APInt Range;
     const Value *SValue;
     unsigned Reg;
-    EVT RegVT;
+    MVT RegVT;
     bool Emitted;
     MachineBasicBlock *Parent;
     MachineBasicBlock *Default;
@@ -285,7 +285,7 @@ public:
   const TargetMachine &TM;
   const TargetLowering &TLI;
   SelectionDAG &DAG;
-  const TargetData *TD;
+  const DataLayout *TD;
   AliasAnalysis *AA;
   const TargetLibraryInfo *LibInfo;
 
@@ -327,7 +327,8 @@ public:
 
   SelectionDAGBuilder(SelectionDAG &dag, FunctionLoweringInfo &funcinfo,
                       CodeGenOpt::Level ol)
-    : SDNodeOrder(0), TM(dag.getTarget()), TLI(dag.getTargetLoweringInfo()),
+    : CurInst(NULL), SDNodeOrder(0), TM(dag.getTarget()),
+      TLI(dag.getTargetLoweringInfo()),
       DAG(dag), FuncInfo(funcinfo), OptLevel(ol),
       HasTailCall(false) {
   }
@@ -364,16 +365,17 @@ public:
   ///
   SDValue getControlRoot();
 
-  DebugLoc getCurDebugLoc() const { return CurDebugLoc; }
+  SDLoc getCurSDLoc() const {
+    return SDLoc(CurInst, SDNodeOrder);
+  }
+
+  DebugLoc getCurDebugLoc() const {
+    return CurInst ? CurInst->getDebugLoc() : DebugLoc();
+  }
 
   unsigned getSDNodeOrder() const { return SDNodeOrder; }
 
   void CopyValueToVirtualRegister(const Value *V, unsigned Reg);
-
-  /// AssignOrderingToNode - Assign an ordering to the node. The order is gotten
-  /// from how the code appeared in the source. The ordering is used by the
-  /// scheduler to effectively turn off scheduling.
-  void AssignOrderingToNode(const SDNode *Node);
 
   void visit(const Instruction &I);
 
@@ -532,13 +534,6 @@ private:
   void visitInlineAsm(ImmutableCallSite CS);
   const char *visitIntrinsicCall(const CallInst &I, unsigned Intrinsic);
   void visitTargetIntrinsic(const CallInst &I, unsigned Intrinsic);
-
-  void visitPow(const CallInst &I);
-  void visitExp2(const CallInst &I);
-  void visitExp(const CallInst &I);
-  void visitLog(const CallInst &I);
-  void visitLog2(const CallInst &I);
-  void visitLog10(const CallInst &I);
 
   void visitVAStart(const CallInst &I);
   void visitVAArg(const VAArgInst &I);

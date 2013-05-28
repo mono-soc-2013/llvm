@@ -173,7 +173,8 @@ struct OperandsSignature {
   ///
   bool initialize(TreePatternNode *InstPatNode, const CodeGenTarget &Target,
                   MVT::SimpleValueType VT,
-                  ImmPredicateSet &ImmediatePredicates) {
+                  ImmPredicateSet &ImmediatePredicates,
+                  const CodeGenRegisterClass *OrigDstRC) {
     if (InstPatNode->isLeaf())
       return false;
     
@@ -245,7 +246,7 @@ struct OperandsSignature {
       if (Op->getType(0) != VT)
         return false;
 
-      DefInit *OpDI = dynamic_cast<DefInit*>(Op->getLeafValue());
+      DefInit *OpDI = dyn_cast<DefInit>(Op->getLeafValue());
       if (!OpDI)
         return false;
       Record *OpLeafRec = OpDI->getDef();
@@ -258,7 +259,9 @@ struct OperandsSignature {
         RC = &Target.getRegisterClass(OpLeafRec);
       else if (OpLeafRec->isSubClassOf("Register"))
         RC = Target.getRegBank().getRegClassForRegister(OpLeafRec);
-      else
+      else if (OpLeafRec->isSubClassOf("ValueType")) {
+        RC = OrigDstRC;
+      } else
         return false;
 
       // For now, this needs to be a register class of some sort.
@@ -406,13 +409,12 @@ static std::string PhyRegForNode(TreePatternNode *Op,
   if (!Op->isLeaf())
     return PhysReg;
 
-  DefInit *OpDI = dynamic_cast<DefInit*>(Op->getLeafValue());
-  Record *OpLeafRec = OpDI->getDef();
+  Record *OpLeafRec = cast<DefInit>(Op->getLeafValue())->getDef();
   if (!OpLeafRec->isSubClassOf("Register"))
     return PhysReg;
 
-  PhysReg += static_cast<StringInit*>(OpLeafRec->getValue( \
-             "Namespace")->getValue())->getValue();
+  PhysReg += cast<StringInit>(OpLeafRec->getValue("Namespace")->getValue())
+               ->getValue();
   PhysReg += "::";
   PhysReg += Target.getRegBank().getReg(OpLeafRec)->getName();
   return PhysReg;
@@ -473,7 +475,7 @@ void FastISelMap::collectPatterns(CodeGenDAGPatterns &CGP) {
       // a bit too complicated for now.
       if (!Dst->getChild(1)->isLeaf()) continue;
 
-      DefInit *SR = dynamic_cast<DefInit*>(Dst->getChild(1)->getLeafValue());
+      DefInit *SR = dyn_cast<DefInit>(Dst->getChild(1)->getLeafValue());
       if (SR)
         SubRegNo = getQualifiedName(SR->getDef());
       else
@@ -504,7 +506,8 @@ void FastISelMap::collectPatterns(CodeGenDAGPatterns &CGP) {
 
     // Check all the operands.
     OperandsSignature Operands;
-    if (!Operands.initialize(InstPatNode, Target, VT, ImmediatePredicates))
+    if (!Operands.initialize(InstPatNode, Target, VT, ImmediatePredicates,
+                             DstRC))
       continue;
 
     std::vector<std::string>* PhysRegInputs = new std::vector<std::string>();
@@ -550,7 +553,7 @@ void FastISelMap::collectPatterns(CodeGenDAGPatterns &CGP) {
     };
     
     if (SimplePatterns[Operands][OpcodeName][VT][RetVT].count(PredicateCheck))
-      throw TGError(Pattern.getSrcRecord()->getLoc(),
+      PrintFatalError(Pattern.getSrcRecord()->getLoc(),
                     "Duplicate record in FastISel table!");
 
     SimplePatterns[Operands][OpcodeName][VT][RetVT][PredicateCheck] = Memo;

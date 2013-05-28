@@ -42,11 +42,6 @@ struct ELFRelocationEntry {
                      const MCSymbol *Sym, uint64_t Addend, const MCFixup &Fixup)
     : r_offset(RelocOffset), Index(Idx), Type(RelType), Symbol(Sym),
       r_addend(Addend), Fixup(&Fixup) {}
-
-  // Support lexicographic sorting.
-  bool operator<(const ELFRelocationEntry &RE) const {
-    return RE.r_offset < r_offset;
-  }
 };
 
 class MCELFObjectTargetWriter {
@@ -79,23 +74,23 @@ public:
   virtual unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
                                 bool IsPCRel, bool IsRelocWithSymbol,
                                 int64_t Addend) const = 0;
-  virtual unsigned getEFlags() const;
   virtual const MCSymbol *ExplicitRelSym(const MCAssembler &Asm,
                                          const MCValue &Target,
                                          const MCFragment &F,
                                          const MCFixup &Fixup,
                                          bool IsPCRel) const;
-  virtual void adjustFixupOffset(const MCFixup &Fixup,
-                                 uint64_t &RelocOffset);
+  virtual const MCSymbol *undefinedExplicitRelSym(const MCValue &Target,
+                                                  const MCFixup &Fixup,
+                                                  bool IsPCRel) const;
 
   virtual void sortRelocs(const MCAssembler &Asm,
                           std::vector<ELFRelocationEntry> &Relocs);
 
   /// @name Accessors
   /// @{
-  uint8_t getOSABI() { return OSABI; }
-  uint16_t getEMachine() { return EMachine; }
-  bool hasRelocationAddend() { return HasRelocationAddend; }
+  uint8_t getOSABI() const { return OSABI; }
+  uint16_t getEMachine() const { return EMachine; }
+  bool hasRelocationAddend() const { return HasRelocationAddend; }
   bool is64Bit() const { return Is64Bit; }
   bool isN64() const { return IsN64; }
   /// @}

@@ -16,20 +16,19 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/GlobalValue.h"
+#include "llvm/Config/config.h"
+#include "llvm/IR/GlobalValue.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Memory.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/DynamicLibrary.h"
-#include "llvm/Config/config.h"
-#include <vector>
+#include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Memory.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cassert>
 #include <climits>
 #include <cstring>
+#include <vector>
 
 #if defined(__linux__)
 #if defined(HAVE_SYS_STAT_H)
@@ -73,15 +72,20 @@ namespace {
     /// getBlockAfter - Return the memory block immediately after this one.
     ///
     MemoryRangeHeader &getBlockAfter() const {
-      return *(MemoryRangeHeader*)((char*)this+BlockSize);
+      return *reinterpret_cast<MemoryRangeHeader *>(
+                reinterpret_cast<char*>(
+                  const_cast<MemoryRangeHeader *>(this))+BlockSize);
     }
 
     /// getFreeBlockBefore - If the block before this one is free, return it,
     /// otherwise return null.
     FreeRangeHeader *getFreeBlockBefore() const {
       if (PrevAllocated) return 0;
-      intptr_t PrevSize = ((intptr_t *)this)[-1];
-      return (FreeRangeHeader*)((char*)this-PrevSize);
+      intptr_t PrevSize = reinterpret_cast<intptr_t *>(
+                            const_cast<MemoryRangeHeader *>(this))[-1];
+      return reinterpret_cast<FreeRangeHeader *>(
+               reinterpret_cast<char*>(
+                 const_cast<MemoryRangeHeader *>(this))-PrevSize);
     }
 
     /// FreeBlock - Turn an allocated block into a free block, adjusting
@@ -501,28 +505,12 @@ namespace {
 
     /// allocateDataSection - Allocate memory for a data section.
     uint8_t *allocateDataSection(uintptr_t Size, unsigned Alignment,
-                                 unsigned SectionID) {
+                                 unsigned SectionID, bool IsReadOnly) {
       return (uint8_t*)DataAllocator.Allocate(Size, Alignment);
     }
 
-    /// startExceptionTable - Use startFunctionBody to allocate memory for the
-    /// function's exception table.
-    uint8_t* startExceptionTable(const Function* F, uintptr_t &ActualSize) {
-      return startFunctionBody(F, ActualSize);
-    }
-
-    /// endExceptionTable - The exception table of F is now allocated,
-    /// and takes the memory in the range [TableStart,TableEnd).
-    void endExceptionTable(const Function *F, uint8_t *TableStart,
-                           uint8_t *TableEnd, uint8_t* FrameRegister) {
-      assert(TableEnd > TableStart);
-      assert(TableStart == (uint8_t *)(CurBlock+1) &&
-             "Mismatched table start/end!");
-
-      uintptr_t BlockSize = TableEnd - (uint8_t *)CurBlock;
-
-      // Release the memory at the end of this block that isn't needed.
-      FreeMemoryList =CurBlock->TrimAllocationToSize(FreeMemoryList, BlockSize);
+    bool finalizeMemory(std::string *ErrMsg) {
+      return false;
     }
 
     uint8_t *getGOTBase() const {
@@ -547,12 +535,6 @@ namespace {
     /// function body.
     void deallocateFunctionBody(void *Body) {
       if (Body) deallocateBlock(Body);
-    }
-
-    /// deallocateExceptionTable - Deallocate memory for the specified
-    /// exception table.
-    void deallocateExceptionTable(void *ET) {
-      if (ET) deallocateBlock(ET);
     }
 
     /// setMemoryWritable - When code generation is in progress,

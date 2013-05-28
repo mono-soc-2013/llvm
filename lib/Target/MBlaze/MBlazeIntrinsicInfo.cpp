@@ -12,13 +12,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "MBlazeIntrinsicInfo.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/Function.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/Module.h"
-#include "llvm/Type.h"
-#include "llvm/Support/raw_ostream.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
 #include <cstring>
 
 using namespace llvm;
@@ -58,9 +58,8 @@ std::string MBlazeIntrinsicInfo::getName(unsigned IntrID, Type **Tys,
 
 unsigned MBlazeIntrinsicInfo::
 lookupName(const char *Name, unsigned Len) const {
-  if (Len < 5 || Name[4] != '.' || Name[0] != 'l' || Name[1] != 'l'
-      || Name[2] != 'v' || Name[3] != 'm')
-    return 0;  // All intrinsics start with 'llvm.'
+  if (!StringRef(Name, Len).startswith("llvm."))
+    return 0; // All intrinsics start with 'llvm.'
 
 #define GET_FUNCTION_RECOGNIZER
 #include "MBlazeGenIntrinsics.inc"
@@ -83,7 +82,7 @@ bool MBlazeIntrinsicInfo::isOverloaded(unsigned IntrID) const {
 #undef GET_INTRINSIC_OVERLOAD_TABLE
 }
 
-/// This defines the "getAttributes(ID id)" method.
+/// This defines the "getAttributes(LLVMContext &C, ID id)" method.
 #define GET_INTRINSIC_ATTRIBUTES
 #include "MBlazeGenIntrinsics.inc"
 #undef GET_INTRINSIC_ATTRIBUTES
@@ -104,7 +103,8 @@ Function *MBlazeIntrinsicInfo::getDeclaration(Module *M, unsigned IntrID,
                                                 Type **Tys,
                                                 unsigned numTy) const {
   assert(!isOverloaded(IntrID) && "MBlaze intrinsics are not overloaded");
-  AttrListPtr AList = getAttributes((mblazeIntrinsic::ID) IntrID);
+  AttributeSet AList = getAttributes(M->getContext(),
+                                    (mblazeIntrinsic::ID) IntrID);
   return cast<Function>(M->getOrInsertFunction(getName(IntrID),
                                                getType(M->getContext(), IntrID),
                                                AList));

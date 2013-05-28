@@ -26,17 +26,17 @@
 #define DEBUG_TYPE "x86-codegen"
 #include "X86.h"
 #include "X86InstrInfo.h"
-#include "llvm/InlineAsm.h"
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/EdgeBundles.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/Passes.h"
+#include "llvm/IR/InlineAsm.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -111,7 +111,7 @@ namespace {
     EdgeBundles *Bundles;
 
     // Return a bitmask of FP registers in block's live-in list.
-    unsigned calcLiveInMask(MachineBasicBlock *MBB) {
+    static unsigned calcLiveInMask(MachineBasicBlock *MBB) {
       unsigned Mask = 0;
       for (MachineBasicBlock::livein_iterator I = MBB->livein_begin(),
            E = MBB->livein_end(); I != E; ++I) {
@@ -198,7 +198,7 @@ namespace {
     }
 
     /// getScratchReg - Return an FP register that is not currently in use.
-    unsigned getScratchReg() {
+    unsigned getScratchReg() const {
       for (int i = NumFPRegs - 1; i >= 8; --i)
         if (!isLive(i))
           return i;
@@ -206,7 +206,7 @@ namespace {
     }
 
     /// isScratchReg - Returns trus if RegNo is a scratch FP register.
-    bool isScratchReg(unsigned RegNo) {
+    static bool isScratchReg(unsigned RegNo) {
       return RegNo > 8 && RegNo < NumFPRegs;
     }
 
@@ -311,7 +311,7 @@ namespace {
     void handleSpecialFP(MachineBasicBlock::iterator &I);
 
     // Check if a COPY instruction is using FP registers.
-    bool isFPCopy(MachineInstr *MI) {
+    static bool isFPCopy(MachineInstr *MI) {
       unsigned DstReg = MI->getOperand(0).getReg();
       unsigned SrcReg = MI->getOperand(1).getReg();
 
@@ -893,8 +893,8 @@ void FPS::adjustLiveRegs(unsigned Mask, MachineBasicBlock::iterator I) {
 
   // Produce implicit-defs for free by using killed registers.
   while (Kills && Defs) {
-    unsigned KReg = CountTrailingZeros_32(Kills);
-    unsigned DReg = CountTrailingZeros_32(Defs);
+    unsigned KReg = countTrailingZeros(Kills);
+    unsigned DReg = countTrailingZeros(Defs);
     DEBUG(dbgs() << "Renaming %FP" << KReg << " as imp %FP" << DReg << "\n");
     std::swap(Stack[getSlot(KReg)], Stack[getSlot(DReg)]);
     std::swap(RegMap[KReg], RegMap[DReg]);
@@ -917,7 +917,7 @@ void FPS::adjustLiveRegs(unsigned Mask, MachineBasicBlock::iterator I) {
 
   // Manually kill the rest.
   while (Kills) {
-    unsigned KReg = CountTrailingZeros_32(Kills);
+    unsigned KReg = countTrailingZeros(Kills);
     DEBUG(dbgs() << "Killing %FP" << KReg << "\n");
     freeStackSlotBefore(I, KReg);
     Kills &= ~(1 << KReg);
@@ -925,7 +925,7 @@ void FPS::adjustLiveRegs(unsigned Mask, MachineBasicBlock::iterator I) {
 
   // Load zeros for all the imp-defs.
   while(Defs) {
-    unsigned DReg = CountTrailingZeros_32(Defs);
+    unsigned DReg = countTrailingZeros(Defs);
     DEBUG(dbgs() << "Defining %FP" << DReg << " as 0\n");
     BuildMI(*MBB, I, DebugLoc(), TII->get(X86::LD_F0));
     pushReg(DReg);
@@ -1636,7 +1636,7 @@ void FPS::handleSpecialFP(MachineBasicBlock::iterator &I) {
     // Note: this might be a non-optimal pop sequence.  We might be able to do
     // better by trying to pop in stack order or something.
     while (FPKills) {
-      unsigned FPReg = CountTrailingZeros_32(FPKills);
+      unsigned FPReg = countTrailingZeros(FPKills);
       if (isLive(FPReg))
         freeStackSlotAfter(InsertPt, FPReg);
       FPKills &= ~(1U << FPReg);

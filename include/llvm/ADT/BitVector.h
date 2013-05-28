@@ -98,7 +98,7 @@ public:
     std::memcpy(Bits, RHS.Bits, Capacity * sizeof(BitWord));
   }
 
-#if LLVM_USE_RVALUE_REFERENCES
+#if LLVM_HAS_RVALUE_REFERENCES
   BitVector(BitVector &&RHS)
     : Bits(RHS.Bits), Size(RHS.Size), Capacity(RHS.Capacity) {
     RHS.Bits = 0;
@@ -153,9 +153,9 @@ public:
     for (unsigned i = 0; i < NumBitWords(size()); ++i)
       if (Bits[i] != 0) {
         if (sizeof(BitWord) == 4)
-          return i * BITWORD_SIZE + CountTrailingZeros_32((uint32_t)Bits[i]);
+          return i * BITWORD_SIZE + countTrailingZeros((uint32_t)Bits[i]);
         if (sizeof(BitWord) == 8)
-          return i * BITWORD_SIZE + CountTrailingZeros_64(Bits[i]);
+          return i * BITWORD_SIZE + countTrailingZeros(Bits[i]);
         llvm_unreachable("Unsupported!");
       }
     return -1;
@@ -176,9 +176,9 @@ public:
 
     if (Copy != 0) {
       if (sizeof(BitWord) == 4)
-        return WordPos * BITWORD_SIZE + CountTrailingZeros_32((uint32_t)Copy);
+        return WordPos * BITWORD_SIZE + countTrailingZeros((uint32_t)Copy);
       if (sizeof(BitWord) == 8)
-        return WordPos * BITWORD_SIZE + CountTrailingZeros_64(Copy);
+        return WordPos * BITWORD_SIZE + countTrailingZeros(Copy);
       llvm_unreachable("Unsupported!");
     }
 
@@ -186,9 +186,9 @@ public:
     for (unsigned i = WordPos+1; i < NumBitWords(size()); ++i)
       if (Bits[i] != 0) {
         if (sizeof(BitWord) == 4)
-          return i * BITWORD_SIZE + CountTrailingZeros_32((uint32_t)Bits[i]);
+          return i * BITWORD_SIZE + countTrailingZeros((uint32_t)Bits[i]);
         if (sizeof(BitWord) == 8)
-          return i * BITWORD_SIZE + CountTrailingZeros_64(Bits[i]);
+          return i * BITWORD_SIZE + countTrailingZeros(Bits[i]);
         llvm_unreachable("Unsupported!");
       }
     return -1;
@@ -237,6 +237,34 @@ public:
     return *this;
   }
 
+  /// set - Efficiently set a range of bits in [I, E)
+  BitVector &set(unsigned I, unsigned E) {
+    assert(I <= E && "Attempted to set backwards range!");
+    assert(E <= size() && "Attempted to set out-of-bounds range!");
+
+    if (I == E) return *this;
+
+    if (I / BITWORD_SIZE == E / BITWORD_SIZE) {
+      BitWord EMask = 1UL << (E % BITWORD_SIZE);
+      BitWord IMask = 1UL << (I % BITWORD_SIZE);
+      BitWord Mask = EMask - IMask;
+      Bits[I / BITWORD_SIZE] |= Mask;
+      return *this;
+    }
+
+    BitWord PrefixMask = ~0UL << (I % BITWORD_SIZE);
+    Bits[I / BITWORD_SIZE] |= PrefixMask;
+    I = RoundUpToAlignment(I, BITWORD_SIZE);
+
+    for (; I + BITWORD_SIZE <= E; I += BITWORD_SIZE)
+      Bits[I / BITWORD_SIZE] = ~0UL;
+
+    BitWord PostfixMask = (1UL << (E % BITWORD_SIZE)) - 1;
+    Bits[I / BITWORD_SIZE] |= PostfixMask;
+
+    return *this;
+  }
+
   BitVector &reset() {
     init_words(Bits, Capacity, false);
     return *this;
@@ -244,6 +272,34 @@ public:
 
   BitVector &reset(unsigned Idx) {
     Bits[Idx / BITWORD_SIZE] &= ~(1L << (Idx % BITWORD_SIZE));
+    return *this;
+  }
+
+  /// reset - Efficiently reset a range of bits in [I, E)
+  BitVector &reset(unsigned I, unsigned E) {
+    assert(I <= E && "Attempted to reset backwards range!");
+    assert(E <= size() && "Attempted to reset out-of-bounds range!");
+
+    if (I == E) return *this;
+
+    if (I / BITWORD_SIZE == E / BITWORD_SIZE) {
+      BitWord EMask = 1UL << (E % BITWORD_SIZE);
+      BitWord IMask = 1UL << (I % BITWORD_SIZE);
+      BitWord Mask = EMask - IMask;
+      Bits[I / BITWORD_SIZE] &= ~Mask;
+      return *this;
+    }
+
+    BitWord PrefixMask = ~0UL << (I % BITWORD_SIZE);
+    Bits[I / BITWORD_SIZE] &= ~PrefixMask;
+    I = RoundUpToAlignment(I, BITWORD_SIZE);
+
+    for (; I + BITWORD_SIZE <= E; I += BITWORD_SIZE)
+      Bits[I / BITWORD_SIZE] = 0UL;
+
+    BitWord PostfixMask = (1UL << (E % BITWORD_SIZE)) - 1;
+    Bits[I / BITWORD_SIZE] &= ~PostfixMask;
+
     return *this;
   }
 
@@ -396,7 +452,7 @@ public:
     return *this;
   }
 
-#if LLVM_USE_RVALUE_REFERENCES
+#if LLVM_HAS_RVALUE_REFERENCES
   const BitVector &operator=(BitVector &&RHS) {
     if (this == &RHS) return *this;
 
