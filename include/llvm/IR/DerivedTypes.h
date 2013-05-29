@@ -426,6 +426,7 @@ class PointerType : public SequentialType {
   PointerType(const PointerType &) LLVM_DELETED_FUNCTION;
   const PointerType &operator=(const PointerType &) LLVM_DELETED_FUNCTION;
   explicit PointerType(Type *ElType, unsigned AddrSpace);
+  bool IsManagedHandle;
 public:
   /// PointerType::get - This constructs a pointer to an object of the specified
   /// type in a numbered address space.
@@ -443,6 +444,12 @@ public:
 
   /// @brief Return the address space of the Pointer type.
   inline unsigned getAddressSpace() const { return getSubclassData(); }
+
+  /// @brief Sets if the pointer is a managed handle.
+  void setAsManagedHandle() { IsManagedHandle = true; }
+
+  /// @brief Return if the pointer is a managed handle.
+  bool isManagedHandle() const { return IsManagedHandle; }
 
   /// Implement support type inquiry through isa, cast, and dyn_cast.
   static inline bool classof(const Type *T) {

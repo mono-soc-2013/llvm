@@ -119,8 +119,22 @@ namespace CallingConv {
     SPIR_KERNEL = 76,
 
     /// Intel_OCL_BI - Calling conventions for Intel OpenCL built-ins
-    Intel_OCL_BI = 77
+    Intel_OCL_BI = 77,
 
+    /// CIL_Static - Calling convention used for CIL static calls.
+    CIL_Static = 80,
+
+    /// CIL_Instance - Calling convention used for CIL instance calls.
+    CIL_Instance = 81,
+
+    /// CIL_Virtual - Calling convention used for CIL virtual instance calls.
+    CIL_Virtual = 82,
+
+    /// CIL_NewObj - Calling convention used for CIL ref type object ctor calls.
+    CIL_NewObj = 83,
+
+    /// CIL_InitObj - Calling convention used for CIL value type object ctor calls.
+    CIL_InitObj = 84
   };
 } // End CallingConv namespace
 

@@ -50,13 +50,18 @@ public:
   /// NumberedTypes - The numbered types, along with their value.
   DenseMap<StructType*, unsigned> NumberedTypes;
 
+  SlotTracker *Machine;
+  Module *TheModule;
 
   TypePrinting() {}
   ~TypePrinting() {}
 
   void incorporateTypes(const Module &M);
+  void incorporateFunctionTypes(const Module &M);
 
   void print(Type *Ty, raw_ostream &OS);
+
+  void printMetadata(Type *Ty, raw_ostream &OS);
 
   void printStructBody(StructType *Ty, raw_ostream &OS);
 };
