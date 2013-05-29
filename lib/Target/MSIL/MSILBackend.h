@@ -13,19 +13,19 @@
 #ifndef MSILBACKEND_H
 #define MSILBACKEND_H
 
-#include "llvm/CallingConv.h"
-#include "llvm/Constants.h"
-#include "llvm/Module.h"
-#include "llvm/Instructions.h"
-#include "llvm/IntrinsicInst.h"
 #include "llvm/Pass.h"
 #include "llvm/PassManager.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/FindUsedTypes.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/IR/CallingConv.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/GetElementPtrTypeIterator.h"
-#include "llvm/Target/TargetData.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/CodeGen/IntrinsicLowering.h"
 
@@ -49,14 +49,16 @@ namespace llvm {
 
     void getAnalysisUsage(AnalysisUsage &AU) const {
       AU.addRequired<FindUsedTypes>();
-      AU.addRequired<TargetData>();
+      AU.addRequired<DataLayout>();
     }
 
     virtual const char *getPassName() const {
       return "MSIL backend definitions";
     }
 
-    virtual bool runOnModule(Module &M);
+    virtual bool doInitialization(Module &M) override;
+
+    virtual bool runOnModule(Module &M) override;
 
     bool lowerIntrinsics(Module &M);
     bool runOnBasicBlock(BasicBlock &BB, IntrinsicLowering &IL);
@@ -85,7 +87,7 @@ namespace llvm {
   public:
     formatted_raw_ostream *Out;
     Module *ModulePtr;
-    TargetData *TD;
+    DataLayout *TD;
     LoopInfo *LInfo;
     SetVector<Type *> UsedTypes;
     std::vector<StaticInitializer>* InitListPtr;
@@ -129,9 +131,9 @@ namespace llvm {
     bool runOnFunction(Function &F);
 
     virtual bool doInitialization(Module &M);
-
     virtual bool doFinalization(Module &M);
 
+    void printStartup();
     void printModuleStartup();
 
     bool isZeroValue(const Value* V);

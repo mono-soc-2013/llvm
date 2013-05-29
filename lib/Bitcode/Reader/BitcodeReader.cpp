@@ -1994,7 +1994,7 @@ bool BitcodeReader::ParseTypeMetadataAttachment() {
     }
     // Read a metadata attachment record.
     Record.clear();
-    switch (Stream.ReadRecord(Code, Record)) {
+    switch (Stream.readRecord(Code, Record)) {
     default:  // Default behavior: ignore.
       break;
     case bitc::METADATA_ATTACHMENT: {

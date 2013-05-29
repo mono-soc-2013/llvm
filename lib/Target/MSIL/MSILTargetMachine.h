@@ -15,7 +15,6 @@
 #define MSILTARGETMACHINE_H
 
 #include "llvm/Target/TargetMachine.h"
-#include "llvm/Target/TargetData.h"
 
 namespace llvm {
 
@@ -33,9 +32,9 @@ struct MSILTargetMachine : public TargetMachine {
                                    CodeGenFileType FileType,
                                    bool DisableVerify,
                                    AnalysisID StartAfter,
-                                   AnalysisID StopAfter);
+                                   AnalysisID StopAfter) override;
 
-  virtual const TargetData *getTargetData() const { return 0; }
+  virtual const DataLayout *getDataLayout() const { return 0; }
 };
 
 extern Target TheMSILTarget;

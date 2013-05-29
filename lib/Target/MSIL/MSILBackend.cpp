@@ -13,17 +13,12 @@
 
 #include "MSILBackend.h"
 #include "MSILTargetMachine.h"
-#include "llvm/CallingConv.h"
-#include "llvm/DerivedTypes.h"
-#include "llvm/Intrinsics.h"
-#include "llvm/IntrinsicInst.h"
 #include "llvm/PassSupport.h"
-#include "llvm/ValueSymbolTable.h"
+#include "llvm/IR/ValueSymbolTable.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Analysis/ConstantsScanner.h"
 #include "llvm/Support/CallSite.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/InstVisitor.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Transforms/Scalar.h"
@@ -36,9 +31,16 @@ extern "C" void LLVMInitializeMSILTarget() {
   RegisterTargetMachine<MSILTargetMachine> X(TheMSILTarget);
 }
 
+bool MSILModule::doInitialization(Module &M) {
+  ModulePtr = &M;
+  return false;
+}
+
 bool MSILModule::runOnModule(Module &M) {
   ModulePtr = &M;
-  Writer->TD = &getAnalysis<TargetData>();
+  Writer->TD = &getAnalysis<DataLayout>();
+  Writer->printStartup();
+
   bool Changed = false;
   // Find named types.
   ValueSymbolTable& Table = M.getValueSymbolTable();
@@ -133,7 +135,7 @@ bool MSILModule::runOnBasicBlock(BasicBlock &BB, IntrinsicLowering &IL) {
 char MSILModule::ID = 0;
 INITIALIZE_PASS_BEGIN(MSILModule, "msil-module",
                 "MSIL module pass", false, false)
-INITIALIZE_PASS_DEPENDENCY(TargetData)
+INITIALIZE_PASS_DEPENDENCY(DataLayout)
 INITIALIZE_PASS_DEPENDENCY(FindUsedTypes)
 INITIALIZE_PASS_END(MSILModule, "msil-module",
                 "MSIL module pass", false, false)
@@ -159,27 +161,27 @@ bool MSILWriter::runOnFunction(Function &F) {
   return false;
 }
 
-
 bool MSILWriter::doInitialization(Module &M) {
   ModulePtr = &M;
-  *Out << ".assembly extern mscorlib {}\n";
-  *Out << ".assembly MSIL {}\n\n";
-  *Out << "// External\n";
-  printExternals();
-  *Out << "// Declarations\n";
-  printDeclarations(M.getValueSymbolTable());
-  *Out << "// Definitions\n";
-  printGlobalVariables();
-  *Out << "// Startup code\n";
-  printModuleStartup();
   return false;
 }
-
 
 bool MSILWriter::doFinalization(Module &M) {
   return false;
 }
 
+void MSILWriter::printStartup() {
+  *Out << ".assembly extern mscorlib {}\n";
+  *Out << ".assembly MSIL {}\n\n";
+  *Out << "// External\n";
+  printExternals();
+  *Out << "// Declarations\n";
+  printDeclarations(ModulePtr->getValueSymbolTable());
+  *Out << "// Definitions\n";
+  printGlobalVariables();
+  *Out << "// Startup code\n";
+  printModuleStartup();
+}
 
 void MSILWriter::printModuleStartup() {
   *Out <<
@@ -1573,7 +1575,7 @@ void MSILWriter::printStaticInitializerList() {
 
 
 void MSILWriter::printFunction(const Function& F) {
-  bool isSigned = F.paramHasAttr(0, Attribute::SExt);
+  bool isSigned = F.getAttributes().hasAttribute(0, Attribute::SExt);
   *Out << "\n.method static ";
   *Out << (F.hasLocalLinkage() ? "private " : "public ");
   if (F.isVarArg()) *Out << "vararg ";
@@ -1584,7 +1586,7 @@ void MSILWriter::printFunction(const Function& F) {
   unsigned ArgIdx = 1;
   for (Function::const_arg_iterator I = F.arg_begin(), E = F.arg_end(); I!=E;
        ++I, ++ArgIdx) {
-    isSigned = F.paramHasAttr(ArgIdx, Attribute::SExt);
+    isSigned = F.getAttributes().hasAttribute(ArgIdx, Attribute::SExt);
     if (I!=F.arg_begin()) *Out << ", ";
     *Out << getTypeName(I->getType(),isSigned) << getValueName(I);
   }
@@ -1905,6 +1907,5 @@ bool MSILTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
   PM.add(createCFGSimplificationPass());
   PM.add(Module);
   PM.add(Writer);
-  PM.add(createGCInfoDeleter());
   return false;
 }
