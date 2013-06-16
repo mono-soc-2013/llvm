@@ -53,11 +53,12 @@ public:
   SlotTracker *Machine;
   Module *TheModule;
 
-  TypePrinting() {}
+  TypePrinting() : Machine(0), TheModule(0) {}
   ~TypePrinting() {}
 
   void incorporateTypes(const Module &M);
   void incorporateFunctionTypes(const Module &M);
+  void incorporateStructType(StructType *STy);
 
   void print(Type *Ty, raw_ostream &OS);
 

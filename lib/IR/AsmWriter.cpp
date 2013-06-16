@@ -173,6 +173,9 @@ void TypePrinting::incorporateTypes(const Module &M) {
   for (I = NamedTypes.begin(), E = NamedTypes.end(); I != E; ++I) {
     StructType *STy = *I;
 
+    // Process metadata attached with this type.
+    incorporateStructType(STy);
+
     // Ignore anonymous types.
     if (STy->isLiteral())
       continue;
@@ -683,11 +686,17 @@ void SlotTracker::CreateAttributeSetSlot(AttributeSet AS) {
   asMap[AS] = DestSlot;
 }
 
+void TypePrinting::incorporateStructType(StructType *STy) {
+  if (Machine)
+    Machine->incorporateType(STy);
+}
+
 void TypePrinting::incorporateFunctionTypes(const Module &M) {
   const Module::FunctionListType &FL = M.getFunctionList();
   for (Module::const_iterator I = FL.begin(), E = FL.end(); I != E; ++I) {
     const Function *F = I;
-    Machine->incorporateType(F->getFunctionType());
+    if (Machine)
+      Machine->incorporateType(F->getFunctionType());
   }
 }
 
@@ -1244,7 +1253,6 @@ void WriteAsOperand(raw_ostream &Out, const Value *V,
 }
 
 void AssemblyWriter::init() {
-  TypePrinter.TheModule = const_cast<Module *>(TheModule);
   TypePrinter.Machine = &Machine;
 
   if (TheModule)
