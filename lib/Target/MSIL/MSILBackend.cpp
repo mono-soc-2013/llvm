@@ -536,14 +536,17 @@ void MSILWriter::printConstLoad(const Constant* C) {
     // Float constant
     uint64_t X;
     unsigned Size;
+    const char *Type = 0;
     if (FP->getType()->getTypeID()==Type::FloatTyID) {
       X = (uint32_t)FP->getValueAPF().bitcastToAPInt().getZExtValue();
-      Size = 4;  
+      Size = 4;
+      Type = "float32";
     } else {
       X = FP->getValueAPF().bitcastToAPInt().getZExtValue();
-      Size = 8;  
+      Size = 8;
+      Type = "float64";
     }
-    *Out << "\tldc.r" << Size << "\t( " << utohexstr(X) << ')';
+    *Out << "\tldc.r" << Size << "\t" << Type << "(" << X << ")";
   } else if (isa<UndefValue>(C)) {
     // Undefined constant value = NULL.
     printPtrLoad(0);
