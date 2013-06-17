@@ -103,6 +103,8 @@ static bool isManagedIntrinsic(Intrinsic::ID Id) {
   case Intrinsic::cil_newvalue:
   case Intrinsic::cil_copyvalue:
   case Intrinsic::cil_newarr:
+  case Intrinsic::cil_ldarr:
+  case Intrinsic::cil_starr:
     return true;
   }
 }
@@ -1187,6 +1189,45 @@ void MSILWriter::printIntrinsicCall(const CallInst* Inst) {
     printValueLoad(Value, /*LoadValueAddress=*/true);
     printValueLoad(Inst->getOperand(1), /*LoadValueAddress=*/true);
     printSimpleInstruction("cpobj", getTypeToken(Value->getType()).c_str());
+    break;
+  }
+  case Intrinsic::cil_newarr: {
+    MDNode *MD = Inst->getMetadata("cil.type");
+    assert(MD->getNumOperands() == 1);
+
+    MDString *MS = dyn_cast<MDString>(MD->getOperand(0));
+    assert(MS && "Expected a valid metadata string");
+
+    unsigned NumElements = Inst->getNumArgOperands();
+    printSimpleInstruction("ldc.i4", utostr_32(NumElements-1).c_str());
+    printSimpleInstruction("newarr",  DemangleName(MS->getString().str()).c_str());
+    for (int I = 1, E = NumElements; I!=E; ++I) {
+      printSimpleInstruction("dup");
+    }
+
+    // Load arguments to stack
+    for (int I = 1, E = NumElements; I!=E; ++I) {
+      printSimpleInstruction("ldc.i4", utostr_32(I-1).c_str());
+      printValueLoad(Inst->getArgOperand(I));
+      printSimpleInstruction("stelem.ref");
+    }
+    break;
+  }
+  case Intrinsic::cil_ldarr: {
+    unsigned NumElements = Inst->getNumArgOperands();
+    assert(NumElements == 2);
+    printValueLoad(Inst->getArgOperand(0)); // Array
+    printValueLoad(Inst->getArgOperand(1)); // Index
+    printSimpleInstruction("ldelem.ref");
+    break;
+  }
+  case Intrinsic::cil_starr: {
+    unsigned NumElements = Inst->getNumArgOperands();
+    assert(NumElements == 3);
+    printValueLoad(Inst->getArgOperand(0)); // Array
+    printValueLoad(Inst->getArgOperand(2)); // Index
+    printValueLoad(Inst->getArgOperand(1)); // Value
+    printSimpleInstruction("stelem.ref");
     break;
   }
   default:
