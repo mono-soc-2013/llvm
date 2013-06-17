@@ -251,7 +251,7 @@ void MSILWriter::printModuleStartup() {
     Arg1 = F->arg_begin();
     if (Arg1->getType()->isIntegerTy()) {
       *Out << "\tldloc\targc\n";
-      Args = getTypeName(Arg1->getType());
+      Args = getFunctionArgTypeName(F->getFunctionType(), Arg1);
       BadSig = false;
     }
     break;
@@ -260,7 +260,8 @@ void MSILWriter::printModuleStartup() {
     if (Arg1->getType()->isIntegerTy() && 
         Arg2->getType()->getTypeID() == Type::PointerTyID) {
       *Out << "\tldloc\targc\n\tldloc\targv\n";
-      Args = getTypeName(Arg1->getType())+","+getTypeName(Arg2->getType());
+      Args = getFunctionArgTypeName(F->getFunctionType(), Arg1)+","+
+        getFunctionArgTypeName(F->getFunctionType(), Arg2);
       BadSig = false;
     }
     break;
@@ -272,7 +273,7 @@ void MSILWriter::printModuleStartup() {
   if (BadSig || (!F->getReturnType()->isIntegerTy() && !RetVoid)) {
     *Out << "\tldc.i4.0\n";
   } else {
-    *Out << "\tcall\t" << getTypeName(F->getReturnType()) <<
+    *Out << "\tcall\t" << getFunctionRetTypeName(F->getFunctionType()) <<
       getConvModopt(F->getCallingConv()) << "main(" << Args << ")\n";
     if (RetVoid)
       *Out << "\tldc.i4.0\n";
@@ -288,18 +289,55 @@ bool MSILWriter::isZeroValue(const Value* V) {
   return false;
 }
 
+static std::string DemangleName(StringRef Name) {
+  if (!Name.endswith("]"))
+    return Name.str();
+  return Name.substr(0, Name.find_last_of("["));
+}
 
-std::string MSILWriter::getValueName(const Value* V, bool WrapInSpaces) {
+static std::string GetFunctionRecordName(StringRef Name) {
+  StringRef::size_type I = Name.find_last_of("::");
+  if (I == StringRef::npos)
+    return StringRef();
+  return Name.substr(0, --I);
+}
+
+static std::string GetFunctionMethodName(StringRef Name) {
+  StringRef::size_type I = Name.find_last_of("::");
+  if (I == StringRef::npos)
+    return Name;
+  return Name.substr(--I);
+}
+
+std::string MSILWriter::getValueName(const Value* V, bool WrapInQuotes) {
   std::string Name;
   if (const GlobalValue *GV = dyn_cast<GlobalValue>(V))
     Name = GV->getName();
-  else {
-    unsigned &No = AnonValueNumbers[V];
-    if (No == 0) No = ++NextAnonValueNumber;
-    Name = "tmp" + utostr(No);
+  else if (!V->getName().empty()) {
+    Name = V->getName();
+  } else {
+    unsigned No;
+    if (AnonValueNumbers.count(V))
+      No = AnonValueNumbers[V];
+    else 
+      No = AnonValueNumbers[V] = NextAnonValueNumber++;
+    Name = "." + utostr(No);
   }
+
+  if (const Function* F = dyn_cast<Function>(V)) {
+    std::string RecordName = GetFunctionRecordName(Name);
+    std::string MethodName = GetFunctionMethodName(Name);
+
+    if (StructType *STy = ModulePtr->getTypeByName(RecordName)) {
+      Name = DemangleName(getTypeName(STy)) + MethodName;
+    } else {
+      Name = DemangleName(RecordName) + MethodName;
+    }
+  }
+
+  Name = DemangleName(Name);
   
-  if (!WrapInSpaces)
+  if (!WrapInQuotes)
     return Name;
 
   // Name into the quotes allow control and space characters.
@@ -402,33 +440,112 @@ std::string MSILWriter::getPrimitiveTypeName(const Type* Ty, bool isSigned) {
   return ""; // Not reached
 }
 
+std::string MSILWriter::getTypeToken(const Type* Ty) {
+  return getTypeName(Ty, false, false, true);
+}
+
+std::string MSILWriter::getILClassTypeToken(const Type* Ty) {
+  const StructType* Struct = cast<StructType>(Ty);
+  if (!Struct->hasName())
+    return StringRef();
+  // FIXME: for now assume opaque structs are managed types.
+  if (Struct->isOpaque()) {
+    if (isValueClassType(Ty))
+      return "valuetype ";
+    else
+      return "class ";
+  }
+}
+
+std::string MSILWriter::getILGenericTypes(const Type* Ty) {
+  MDNode *Node = Ty->getMetadata("cil.generic");
+  if (!Node) return "";
+
+  std::string Out = "<";
+  for (unsigned I = 0, E = Node->getNumOperands(); I != E; ++I) {
+    ConstantPointerNull *P = dyn_cast<ConstantPointerNull>(Node->getOperand(I));
+    assert(P && "Expected a valid constant pointer");
+
+    llvm::Type *Ty = P->getType()->getPointerElementType();
+    Out += getTypeName(Ty);
+
+    if (I + 1 < E)
+      Out += ", ";
+  }
+  Out += ">";
+
+  return Out;
+}
+
+static bool GetCLISignednessParameter(const FunctionType* Ty,
+                                   llvm::SmallVector<unsigned, 4> &Signedness) {
+  MDNode *Params = Ty->getMetadata("cil.signedness");
+  if (!Params) return false;
+  
+  for (unsigned I = 0, E = Params->getNumOperands(); I != E; ++I) {
+    ConstantInt *Op = dyn_cast<ConstantInt>(Params->getOperand(I));
+    assert(Op && "Expected a constant integer metadata node");
+    Signedness.push_back(Op->getLimitedValue());
+  }
+
+  assert(Signedness.size() == Ty->getNumParams() + 1);
+  return true;
+}
+
+std::string MSILWriter::getFunctionRetTypeName(const FunctionType *FTy) {
+  llvm::SmallVector<unsigned, 4> Signedness;
+  bool HasSignedness = GetCLISignednessParameter(FTy, Signedness);
+
+  return getTypeName(FTy->getReturnType(), HasSignedness && Signedness[0]);
+}
+
+std::string MSILWriter::getFunctionArgTypeName(const FunctionType *FTy,
+                                    Function::const_arg_iterator Arg) {
+  llvm::SmallVector<unsigned, 4> Signedness;
+  bool HasSignedness = GetCLISignednessParameter(FTy, Signedness);
+
+  return getTypeName(Arg->getType(), HasSignedness && Signedness[Arg->getArgNo()]);
+}
 
 std::string MSILWriter::getTypeName(const Type* Ty, bool isSigned,
-                                    bool isNested, bool isManaged) {
+                                    bool isNested, bool isToken) {
   if (Ty->isPrimitiveType() || Ty->isIntegerTy())
     return getPrimitiveTypeName(Ty,isSigned);
   // FIXME: "OpaqueType" support
   switch (Ty->getTypeID()) {
-  case Type::PointerTyID:
-    if (isManaged)
-      return getTypeName(Ty->getPointerElementType(), isSigned, isNested,
-        isManaged);
+  case Type::PointerTyID: {
+    Type* RecTy = 0;
+    if (hasRecursiveManagedType(Ty, RecTy)) {
+      std::string TypeName = getTypeName(Ty->getPointerElementType(), isSigned,
+        isNested, isToken);
+      if (!cast<PointerType>(Ty)->isManagedHandle() && !isToken)
+        TypeName += "& ";
+      return TypeName;
+    }
     return "void* ";
+  }
   case Type::StructTyID: {
     const StructType* Struct = cast<StructType>(Ty);
     if (!Struct->hasName())
       return StringRef();
     // FIXME: for now assume opaque structs are managed types.
-    if (Struct->isOpaque()) 
-      return "class " + Ty->getStructName().str();
+    if (Struct->isOpaque()) {
+      return getILClassTypeToken(Ty)+DemangleName(Ty->getStructName().str())
+        + getILGenericTypes(Ty) + " ";
+    }
     if (isNested)
       return Ty->getStructName();
-    return "valuetype '"+Ty->getStructName().str()+"' ";
+    return "class " + Ty->getStructName().str()+" ";
   }
-  case Type::ArrayTyID:
+  case Type::ArrayTyID: {
+    Type* ElemTy = Ty->getArrayElementType();
+    Type* ElemRecTy = 0;
+    if (hasRecursiveManagedType(ElemTy, ElemRecTy))
+      return getTypeName(ElemRecTy, isSigned, isNested, isToken)+"[]";
     if (isNested)
       return getArrayTypeName(Ty->getTypeID(),Ty);
     return "valuetype '"+getArrayTypeName(Ty->getTypeID(),Ty)+"' ";
+  }
   case Type::VectorTyID:
     if (isNested)
       return getArrayTypeName(Ty->getTypeID(),Ty);
@@ -558,7 +675,7 @@ void MSILWriter::printConstLoad(const Constant* C) {
 }
 
 
-void MSILWriter::printValueLoad(const Value* V) {
+void MSILWriter::printValueLoad(const Value* V, bool LoadValueAddress) {
   MSILWriter::ValueType Location = getValueLocation(V);
   switch (Location) {
   // Global variable or function address.
@@ -586,6 +703,10 @@ void MSILWriter::printValueLoad(const Value* V) {
     break;
   // Local function variable.
   case LocalVT:
+    if (isValueClassType(V->getType()) && LoadValueAddress) {
+      printSimpleInstruction("ldloca",getValueName(V).c_str());
+      break;
+    }
     printSimpleInstruction("ldloc",getValueName(V).c_str());
     break;
   // Constant value.
@@ -714,6 +835,17 @@ void MSILWriter::printSelectInstruction(const Value* Cond, const Value* VTrue,
 }
 
 
+void MSILWriter::printLoadInstruction(const Value* V) {
+  Type *Ty;
+  if (hasRecursiveManagedType(V->getType(), Ty)) {
+    printValueLoad(V);
+    return;
+  }
+
+  printIndirectLoad(V);
+}
+
+
 void MSILWriter::printIndirectLoad(const Value* V) {
   const Type* Ty = V->getType();
   printValueLoad(V);
@@ -723,6 +855,18 @@ void MSILWriter::printIndirectLoad(const Value* V) {
   printSimpleInstruction(Tmp.c_str());
 }
 
+
+void MSILWriter::printStoreInstruction(const Value* Ptr, const Value* Val) {
+  llvm::Type *Ty = Val->getType();
+  if (PointerType *PTy = dyn_cast<PointerType>(Ty)) {
+    if (PTy->isManagedHandle()) {
+      printValueLoad(Val);
+      printValueSave(Ptr);
+      return;
+    }
+  }
+  printIndirectSave(Ptr, Val);
+}
 
 void MSILWriter::printIndirectSave(const Value* Ptr, const Value* Val) {
   printValueLoad(Ptr);
@@ -824,18 +968,49 @@ void MSILWriter::printGepInstruction(const Value* V, gep_type_iterator I,
   }
 }
 
+static bool GetCLIGenericParameter(const FunctionType* Ty, const Instruction* Inst,
+                                   llvm::SmallVector<unsigned, 4> &GenericParams,
+                                   MSILWriter::CLICallType CallType) {
+  MDNode *Params = Inst->getMetadata("cil.params");
+  if (!Params) return false;
+  
+  for (unsigned I = 0, E = Params->getNumOperands(); I != E; ++I) {
+    ConstantInt *Op = dyn_cast<ConstantInt>(Params->getOperand(I));
+    assert(Op && "Expected a constant integer metadata node");
+    GenericParams.push_back(Op->getLimitedValue());
+
+    if ((CallType == MSILWriter::CLI_Instance) && (I==0)) {
+      // Add an extra first parameter for instance methods
+       GenericParams.push_back(0);
+    }
+  }
+
+  assert(GenericParams.size() == Ty->getNumParams() + 1);
+  
+  return true;
+}
 
 std::string MSILWriter::getCallSignature(const FunctionType* Ty,
                                          const Instruction* Inst,
                                          std::string Name, CLICallType CallType) {
   bool isManaged = CallType != CLI_Native;
+
+  llvm::SmallVector<unsigned, 4> GenericParams;
+  bool HasGenericParams = GetCLIGenericParameter(Ty, Inst, GenericParams,
+    CallType);
+
+  llvm::SmallVector<unsigned, 4> Signedness;
+  bool HasSignedness = GetCLISignednessParameter(Ty, Signedness);
+
   std::string Tmp("");
   if (Ty->isVarArg()) Tmp += "vararg ";
   // Name and return type.
-  if (CallType == CLI_Ctor)
-    Tmp += getTypeName(Type::getVoidTy(ModulePtr->getContext()))+Name+"(";
+  bool RetSign = HasSignedness && Signedness[0];
+  if (HasGenericParams && GenericParams[0])
+    Tmp +=  "!" + std::to_string(GenericParams[0] - 1) + " ";
   else
-    Tmp += getTypeName(Ty->getReturnType(), false, false, isManaged)+Name+"(";
+    Tmp += getTypeName(Ty->getReturnType(), RetSign, false);
+  Tmp += /*getILClassTypeToken(Ty)+*/ Name+"(";
   // Function argument type list.
   unsigned NumParams = Ty->getNumParams();
   bool PrintComma = false;
@@ -843,7 +1018,11 @@ std::string MSILWriter::getCallSignature(const FunctionType* Ty,
     if ((CallType == CLI_Instance) && (I==0))
       continue; // Skip the first parameter for instance methods
     if (PrintComma) Tmp += ",";
-    Tmp += getTypeName(Ty->getParamType(I), false, false, isManaged);
+    bool ParamSign = HasSignedness && Signedness[I+1];
+    if (HasGenericParams && GenericParams[I+1])
+      Tmp +=  "!" + std::to_string(GenericParams[I+1] - 1);
+    else
+      Tmp += getTypeName(Ty->getParamType(I), ParamSign, false);
     PrintComma = true;
   }
   // CLR needs to know the exact amount of parameters received by vararg
@@ -858,8 +1037,7 @@ std::string MSILWriter::getCallSignature(const FunctionType* Ty,
       Tmp += "... , ";
       for (unsigned J = NumParams; J!=NumOperands; ++J) {
         if (J!=NumParams) Tmp += ", ";
-        Tmp += getTypeName(Inst->getOperand(J+Org)->getType(), false, false,
-          isManaged);
+        Tmp += getTypeName(Inst->getOperand(J+Org)->getType(), false, false);
       }
     }
   }
@@ -868,37 +1046,52 @@ std::string MSILWriter::getCallSignature(const FunctionType* Ty,
 
 void MSILWriter::printManagedStaticCall(const Function* Fn,
                                   const Instruction* Inst) {
-  std::string Name = getValueName(Fn, false /*WrapInSpaces*/);
+  std::string Name = getValueName(Fn, false /*WrapInQuotes*/);
   printSimpleInstruction("call",
     getCallSignature(Fn->getFunctionType(),Inst,Name,CLI_Static).c_str());
 }
 
 void MSILWriter::printManagedInstanceCall(const Function* Fn,
                                   const Instruction* Inst) {
-  std::string Name = getValueName(Fn, false /*WrapInSpaces*/);
-  printSimpleInstruction("call instance",
+  std::string Name = getValueName(Fn, false /*WrapInQuotes*/);
+  printSimpleInstruction("callvirt instance",
     getCallSignature(Fn->getFunctionType(),Inst,Name,CLI_Instance).c_str());
 }
 
 void MSILWriter::printNewObjCall(const Function* Fn,
                                  const Instruction* Inst) {
-  std::string Name = getValueName(Fn, false /*WrapInSpaces*/);
+  std::string Name = getValueName(Fn, false /*WrapInQuotes*/);
   printSimpleInstruction("newobj instance",
     getCallSignature(Fn->getFunctionType(),Inst,Name,CLI_Ctor).c_str());
 }
 
+void MSILWriter::printFunctionCallArgs(CallingConv::ID CC, FnArgs &Args) {
+  // Load arguments to stack and call function.
+  for (int I = 0, E = Args.size(); I!=E; ++I) {
+    bool LoadValueAddress = CC == CallingConv::CIL_Instance;
+    printValueLoad(Args[I], LoadValueAddress);
+  }
+}
 
 void MSILWriter::printFunctionCall(const Value* FnVal,
                                    const Instruction* Inst) {
   CallingConv::ID CC = CallingConv::C;
-  if (const CallInst* Call = dyn_cast<CallInst>(Inst))
+  FnArgs Args;
+
+  if (const CallInst* Call = dyn_cast<CallInst>(Inst)) {
     CC = Call->getCallingConv();
-  else if (const InvokeInst* Invoke = dyn_cast<InvokeInst>(Inst))
+    for (int I = 0, E = Call->getNumArgOperands(); I!=E; ++I)
+      Args.push_back(Call->getArgOperand(I));
+  } else if (const InvokeInst* Invoke = dyn_cast<InvokeInst>(Inst)) {
     CC = Invoke->getCallingConv();
-  else {
+    for (int I = 0, E = Invoke->getNumArgOperands(); I!=E; ++I)
+      Args.push_back(Invoke->getArgOperand(I));
+  } else {
     errs() << "Instruction = " << Inst->getName() << '\n';
     llvm_unreachable("Need \"Invoke\" or \"Call\" instruction only");
   }
+
+  printFunctionCallArgs(CC, Args);
 
   // Get function calling convention.
   std::string Name = getConvModopt(CC);
@@ -950,7 +1143,8 @@ void MSILWriter::printIntrinsicCall(const CallInst* Inst) {
   case Intrinsic::vaend:
     // Close argument list handle.
     printIndirectLoad(Inst->getArgOperand(0));
-    printSimpleInstruction("call","instance void [mscorlib]System.ArgIterator::End()");
+    printSimpleInstruction("call",
+      "instance void [mscorlib]System.ArgIterator::End()");
     break;
   case Intrinsic::vacopy:
     // Copy "ArgIterator" valuetype.
@@ -990,9 +1184,6 @@ void MSILWriter::printCallInstruction(const Instruction* Inst) {
     return;
   }
   const CallInst *CI = cast<CallInst>(Inst);
-  // Load arguments to stack and call function.
-  for (int I = 0, E = CI->getNumArgOperands(); I!=E; ++I)
-    printValueLoad(CI->getArgOperand(I));
   printFunctionCall(CI->getCalledFunction(), Inst);
 }
 
@@ -1145,9 +1336,9 @@ void MSILWriter::printFCmpInstruction(unsigned Predicate, const Value* Left,
 void MSILWriter::printInvokeInstruction(const InvokeInst* Inst) {
   std::string Label = "leave$normal_"+utostr(getUniqID());
   *Out << ".try {\n";
-  // Load arguments
-  for (int I = 0, E = Inst->getNumArgOperands(); I!=E; ++I)
-    printValueLoad(Inst->getArgOperand(I));
+  //// Load arguments
+  //for (int I = 0, E = Inst->getNumArgOperands(); I!=E; ++I)
+  //  printValueLoad(Inst->getArgOperand(I));
   // Print call instruction
   printFunctionCall(Inst->getOperand(0),Inst);
   // Save function result and leave "try" block
@@ -1192,21 +1383,41 @@ void MSILWriter::printVAArgInstruction(const VAArgInst* Inst) {
 }
 
 
-void MSILWriter::printAllocaInstruction(const AllocaInst* Inst) {
-  uint64_t Size = TD->getTypeAllocSize(Inst->getAllocatedType());
+void MSILWriter::printAllocaInstruction(const AllocaInst* Inst,
+                                        bool &NeedsValueSave) {
+  llvm::Type *AllocType = Inst->getAllocatedType();
+
+  uint64_t Size = 0;
+  if (AllocType->isSized())
+    Size = TD->getTypeAllocSize(Inst->getAllocatedType());
+  
+  if (const PointerType *PTy = dyn_cast<PointerType>(AllocType)) {
+    if (PTy->isManagedHandle()) {
+      NeedsValueSave = false;
+      return;
+    }
+  } else if (const StructType *STy = dyn_cast<StructType>(AllocType)) {
+    if (isValueClassType(STy)) {
+      NeedsValueSave = false;
+      return;
+    }
+  }
+
+  llvm::Value *Op = Inst->getOperand(0);
   // Constant optimization.
-  if (const ConstantInt* CInt = dyn_cast<ConstantInt>(Inst->getOperand(0))) {
+  if (const ConstantInt* CInt = dyn_cast<ConstantInt>(Op)) {
     printPtrLoad(CInt->getZExtValue()*Size);
   } else {
     printPtrLoad(Size);
-    printValueLoad(Inst->getOperand(0));
+    printValueLoad(Op);
     printSimpleInstruction("mul");
   }
   printSimpleInstruction("localloc");
 }
 
 
-void MSILWriter::printInstruction(const Instruction* Inst) {
+void MSILWriter::printInstruction(const Instruction* Inst,
+                                  bool &NeedsValueSave) {
   const Value *Left = 0, *Right = 0;
   if (Inst->getNumOperands()>=1) Left = Inst->getOperand(0);
   if (Inst->getNumOperands()>=2) Right = Inst->getOperand(1);
@@ -1290,10 +1501,10 @@ void MSILWriter::printInstruction(const Instruction* Inst) {
     printSelectInstruction(Inst->getOperand(0),Inst->getOperand(1),Inst->getOperand(2));
     break;
   case Instruction::Load:
-    printIndirectLoad(Inst->getOperand(0));
+    printLoadInstruction(Inst->getOperand(0));
     break;
   case Instruction::Store:
-    printIndirectSave(Inst->getOperand(1), Inst->getOperand(0));
+    printStoreInstruction(Inst->getOperand(1), Inst->getOperand(0));
     break;
   case Instruction::SExt:
     printCastInstruction(Inst->getOpcode(),Left,
@@ -1335,7 +1546,7 @@ void MSILWriter::printInstruction(const Instruction* Inst) {
     printSwitchInstruction(cast<SwitchInst>(Inst));
     break;
   case Instruction::Alloca:
-    printAllocaInstruction(cast<AllocaInst>(Inst));
+    printAllocaInstruction(cast<AllocaInst>(Inst), NeedsValueSave);
     break;
   case Instruction::Unreachable:
     printSimpleInstruction("ldstr", "\"Unreachable instruction\"");
@@ -1377,16 +1588,81 @@ void MSILWriter::printBasicBlock(const BasicBlock* BB) {
     // Do not handle PHI instruction in current block
     if (Inst->getOpcode()==Instruction::PHI) continue;
     // Print instruction
-    printInstruction(Inst);
+    bool NeedsValueSave = true;
+    printInstruction(Inst, NeedsValueSave);
     // Save result
     if (Inst->getType()!=Type::getVoidTy(BB->getContext())) {
       // Do not save value after invoke, it done in "try" block
       if (Inst->getOpcode()==Instruction::Invoke) continue;
-      printValueSave(Inst);
+      if (NeedsValueSave)
+        printValueSave(Inst);
     }
   }
 }
 
+bool MSILWriter::getManagedName(const Type* Ty, std::string& Assembly,
+                                std::string& Type) {
+  assert (Ty->isStructTy());
+
+  if (!cast<StructType>(Ty)->hasName())
+    return false;
+
+  StringRef Name = Ty->getStructName();
+  auto LBracket = Name.find_first_of("[");
+  auto RBracket = Name.find_last_of("]");
+
+  if (LBracket != StringRef::npos && RBracket != StringRef::npos) {
+    Assembly = Name.substr(LBracket + 1, RBracket);
+    Type = Name.substr(RBracket + 1);
+    return true;
+  }
+  return false;
+}
+
+bool MSILWriter::isManagedType(const Type* Ty) {
+  if (!Ty->isStructTy())
+    return false;
+  
+  std::string Assembly;
+  std::string Type;
+  return getManagedName(Ty, Assembly, Type);
+}
+
+bool MSILWriter::isValueClassType(const Type* OrigTy) {
+  Type *Ty;
+  if (!hasRecursiveManagedType(OrigTy, Ty))
+    return false;
+
+  MDNode *MD = Ty->getMetadata("cil.type");
+  if (!MD || !MD->getNumOperands())
+    return false;
+
+  MDString *MS = dyn_cast<MDString>(MD->getOperand(0));
+  if (!MS)
+    return false;
+
+  return MS->getString().str() == "value";
+}
+
+bool MSILWriter::hasRecursiveManagedType(const Type* Ty, Type*& RecTy) {
+  if (Ty->isPointerTy()) {
+    RecTy = Ty->getPointerElementType();
+    return hasRecursiveManagedType(RecTy, RecTy);
+  } else if (Ty->isArrayTy()) {
+    RecTy = Ty->getArrayElementType();
+    return hasRecursiveManagedType(RecTy, RecTy);
+  }
+
+  RecTy = (Type*) Ty;
+  return isManagedType(Ty);
+}
+
+Type* MSILWriter::getLocalType(Type* Ty) {
+  Type* RecTy = 0;
+  if (hasRecursiveManagedType(Ty, RecTy))
+    return RecTy;
+  return PointerType::getUnqual(Ty);
+}
 
 void MSILWriter::printLocalVariables(const Function& F) {
   std::string Name;
@@ -1394,18 +1670,20 @@ void MSILWriter::printLocalVariables(const Function& F) {
   std::set<const Value*> Printed;
   const Value* VaList = NULL;
   unsigned StackDepth = 8;
+
   // Find local variables
   for (const_inst_iterator I = inst_begin(&F), E = inst_end(&F); I!=E; ++I) {
-    if (I->getOpcode()==Instruction::Call ||
-        I->getOpcode()==Instruction::Invoke) {
+    if (I->getOpcode() == Instruction::Call ||
+        I->getOpcode() == Instruction::Invoke) {
       // Test stack depth.
-      if (StackDepth<I->getNumOperands())
+      if (StackDepth < I->getNumOperands())
         StackDepth = I->getNumOperands();
     }
+
     const AllocaInst* AI = dyn_cast<AllocaInst>(&*I);
     if (AI && !isa<GlobalVariable>(AI)) {
       // Local variable allocation.
-      Ty = PointerType::getUnqual(AI->getAllocatedType());
+      Ty = getLocalType(AI->getAllocatedType());
       Name = getValueName(AI);
       *Out << "\t.locals (" << getTypeName(Ty) << Name << ")\n";
     } else if (I->getType()!=Type::getVoidTy(F.getContext())) {
@@ -1414,8 +1692,9 @@ void MSILWriter::printLocalVariables(const Function& F) {
       Name = getValueName(&*I);
       *Out << "\t.locals (" << getTypeName(Ty) << Name << ")\n";
     }
-    // Test on 'va_list' variable    
-    bool isVaList = false;     
+
+    // Test on 'va_list' variable
+    bool isVaList = false;
     if (const VAArgInst* VaInst = dyn_cast<VAArgInst>(&*I)) {
       // "va_list" as "va_arg" instruction operand.
       isVaList = true;
@@ -1433,6 +1712,7 @@ void MSILWriter::printLocalVariables(const Function& F) {
         isVaList = false;
       }
     }
+
     // Print "va_list" variable.
     if (isVaList && Printed.insert(VaList).second) {
       Name = getValueName(VaList);
@@ -1441,6 +1721,7 @@ void MSILWriter::printLocalVariables(const Function& F) {
           << Name << ")\n";
     }
   }
+
   printSimpleInstruction(".maxstack",utostr(StackDepth*2).c_str());
 }
 
@@ -1578,11 +1859,12 @@ void MSILWriter::printStaticInitializerList() {
 
 
 void MSILWriter::printFunction(const Function& F) {
+  // FIXME: Signedness for getTypeName
   bool isSigned = F.getAttributes().hasAttribute(0, Attribute::SExt);
   *Out << "\n.method static ";
   *Out << (F.hasLocalLinkage() ? "private " : "public ");
   if (F.isVarArg()) *Out << "vararg ";
-  *Out << getTypeName(F.getReturnType(),isSigned) << 
+  *Out << getFunctionRetTypeName(F.getFunctionType()) << 
     getConvModopt(F.getCallingConv()) << getValueName(&F) << '\n';
   // Arguments
   *Out << "\t(";
@@ -1591,7 +1873,7 @@ void MSILWriter::printFunction(const Function& F) {
        ++I, ++ArgIdx) {
     isSigned = F.getAttributes().hasAttribute(ArgIdx, Attribute::SExt);
     if (I!=F.arg_begin()) *Out << ", ";
-    *Out << getTypeName(I->getType(),isSigned) << getValueName(I);
+    *Out << getFunctionArgTypeName(F.getFunctionType(), I) << getValueName(I);
   }
   *Out << ") cil managed\n";
   // Body
@@ -1605,7 +1887,7 @@ void MSILWriter::printFunction(const Function& F) {
 void MSILWriter::printDeclarations(const ValueSymbolTable& ST) {
   std::string Name;
   std::set<const Type*> Printed;
-
+  
   for (SetVector<Type *>::iterator UI = UsedTypes.begin(), UE = UsedTypes.end();
        UI!=UE; ++UI) {
     const Type* Ty = *UI;
@@ -1613,6 +1895,7 @@ void MSILWriter::printDeclarations(const ValueSymbolTable& ST) {
       Name = getTypeName(Ty, false, true);
     // Type with no need to declare.
     else continue;
+    if (isManagedType(Ty)) continue;
     // Print not duplicated type
     if (Printed.insert(Ty).second) {
       *Out << ".class value explicit ansi sealed '" << Name << "'";

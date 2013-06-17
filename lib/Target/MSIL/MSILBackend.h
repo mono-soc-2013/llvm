@@ -131,6 +131,7 @@ namespace llvm {
     bool runOnFunction(Function &F);
 
     virtual bool doInitialization(Module &M);
+
     virtual bool doFinalization(Module &M);
 
     void printStartup();
@@ -154,8 +155,19 @@ namespace llvm {
 
     std::string getPointerTypeName(const Type* Ty);
 
+    std::string getTypeToken(const Type* Ty);
+
+    std::string getILClassTypeToken(const Type* Ty);
+
+    std::string getILGenericTypes(const Type* Ty);
+
     std::string getTypeName(const Type* Ty, bool isSigned = false,
-                            bool isNested = false, bool isManaged = false);
+                            bool isNested = false, bool isToken = false);
+
+    std::string getFunctionRetTypeName(const FunctionType *FTy);
+
+    std::string getFunctionArgTypeName(const FunctionType *FTy,
+                                       Function::const_arg_iterator Arg);
 
     ValueType getValueLocation(const Value* V);
 
@@ -170,7 +182,7 @@ namespace llvm {
 
     void printConstLoad(const Constant* C);
 
-    void printValueLoad(const Value* V);
+    void printValueLoad(const Value* V, bool LoadValueAddress = false);
 
     void printValueSave(const Value* V);
 
@@ -192,9 +204,13 @@ namespace llvm {
 
     void printIndirectLoad(const Value* V);
 
+    void printLoadInstruction(const Value* Val);
+
     void printIndirectSave(const Value* Ptr, const Value* Val);
 
     void printIndirectSave(const Type* Ty);
+
+    void printStoreInstruction(const Value* Ptr, const Value* Val);
 
     void printCastInstruction(unsigned int Op, const Value* V,
                               const Type* Ty, const Type* SrcTy=0);
@@ -214,6 +230,9 @@ namespace llvm {
                                  std::string Name, CLICallType = CLI_Native);
 
     void printFunctionCall(const Value* FnVal, const Instruction* Inst);
+
+    typedef SmallVector<Value *, 6> FnArgs;
+    void printFunctionCallArgs(CallingConv::ID CC, FnArgs &Args);
 
     void printManagedStaticCall(const Function* Fn, const Instruction* Inst);
 
@@ -237,14 +256,14 @@ namespace llvm {
 
     void printVAArgInstruction(const VAArgInst* Inst);
 
-    void printAllocaInstruction(const AllocaInst* Inst);
+    void printAllocaInstruction(const AllocaInst* Inst, bool &NeedsValueSave);
 
-    void printInstruction(const Instruction* Inst);
+    void printInstruction(const Instruction* Inst, bool &NeedsValueSave);
 
     void printLoop(const Loop* L);
 
     void printBasicBlock(const BasicBlock* BB);
-    
+
     void printLocalVariables(const Function& F);
 
     void printFunctionBody(const Function& F);
@@ -277,6 +296,15 @@ namespace llvm {
                                     CallingConv::ID CallingConv);
 
     void printExternals();
+
+    // Managed type helpers
+
+    bool isManagedType(const Type* Ty);
+    bool isValueClassType(const Type* Ty);
+    Type* getLocalType(Type* Ty);
+    bool getManagedName(const Type* Ty, std::string& Assembly,
+                        std::string& Type);
+    bool hasRecursiveManagedType(const Type* Ty, Type*& RecTy);
   };
 
 }
