@@ -105,6 +105,7 @@ static bool isManagedIntrinsic(Intrinsic::ID Id) {
   case Intrinsic::cil_newarr:
   case Intrinsic::cil_ldarr:
   case Intrinsic::cil_starr:
+  case Intrinsic::cil_box:
     return true;
   }
 }
@@ -1228,6 +1229,17 @@ void MSILWriter::printIntrinsicCall(const CallInst* Inst) {
     printValueLoad(Inst->getArgOperand(2)); // Index
     printValueLoad(Inst->getArgOperand(1)); // Value
     printSimpleInstruction("stelem.ref");
+    break;
+  }
+  case Intrinsic::cil_box: {
+    unsigned NumElements = Inst->getNumArgOperands();
+    assert(NumElements == 2);
+    printValueLoad(Inst->getArgOperand(0)); // Value
+
+    Type *Ty = Inst->getArgOperand(1)->getType()->getPointerElementType();
+    assert(Ty->isStructTy());
+
+    printSimpleInstruction("box", getTypeToken(Ty).c_str());
     break;
   }
   default:
