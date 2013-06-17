@@ -100,6 +100,8 @@ static bool isManagedIntrinsic(Intrinsic::ID Id) {
   case Intrinsic::cil_ldstr:
   case Intrinsic::cil_ldnull:
   case Intrinsic::cil_newobj:
+  case Intrinsic::cil_newvalue:
+  case Intrinsic::cil_copyvalue:
   case Intrinsic::cil_newarr:
     return true;
   }
@@ -1168,6 +1170,23 @@ void MSILWriter::printIntrinsicCall(const CallInst* Inst) {
     break;
   }
   case Intrinsic::cil_newobj: {
+    break;
+  }
+  case Intrinsic::cil_newvalue: {
+    unsigned NumElements = Inst->getNumArgOperands();
+    assert(NumElements == 1 && "Expected one value class type value");
+    llvm::Value *Value = Inst->getOperand(0);
+    printValueLoad(Value, /*LoadValueAddress=*/true);
+    printSimpleInstruction("initobj", getTypeToken(Value->getType()).c_str());
+    break;
+  }
+  case Intrinsic::cil_copyvalue: {
+    unsigned NumElements = Inst->getNumArgOperands();
+    assert(NumElements == 2 && "Expected 2 value class type values");
+    llvm::Value *Value = Inst->getOperand(0);
+    printValueLoad(Value, /*LoadValueAddress=*/true);
+    printValueLoad(Inst->getOperand(1), /*LoadValueAddress=*/true);
+    printSimpleInstruction("cpobj", getTypeToken(Value->getType()).c_str());
     break;
   }
   default:
