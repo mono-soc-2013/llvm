@@ -24,6 +24,8 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/Passes.h"
+#include <sstream>
+
 using namespace llvm;
 
 extern "C" void LLVMInitializeMSILTarget() {
@@ -1011,8 +1013,12 @@ std::string MSILWriter::getCallSignature(const FunctionType* Ty,
   if (Ty->isVarArg()) Tmp += "vararg ";
   // Name and return type.
   bool RetSign = HasSignedness && Signedness[0];
-  if (HasGenericParams && GenericParams[0])
-    Tmp +=  "!" + std::to_string(GenericParams[0] - 1) + " ";
+  if (HasGenericParams && GenericParams[0]) {
+    //Tmp +=  "!" + std::to_string(GenericParams[0] - 1) + " ";
+    std::ostringstream stream;
+    stream << "!" << GenericParams[0] - 1 << " ";
+    Tmp += stream.str();
+  }
   else
     Tmp += getTypeName(Ty->getReturnType(), RetSign, false);
   Tmp += /*getILClassTypeToken(Ty)+*/ Name+"(";
@@ -1024,8 +1030,12 @@ std::string MSILWriter::getCallSignature(const FunctionType* Ty,
       continue; // Skip the first parameter for instance methods
     if (PrintComma) Tmp += ",";
     bool ParamSign = HasSignedness && Signedness[I+1];
-    if (HasGenericParams && GenericParams[I+1])
-      Tmp +=  "!" + std::to_string(GenericParams[I+1] - 1);
+    if (HasGenericParams && GenericParams[I+1]) {
+      //Tmp +=  "!" + std::to_string(GenericParams[I+1] - 1);
+      std::ostringstream stream;
+      stream << "!" << GenericParams[I+1] - 1;
+      Tmp += stream.str();
+    }
     else
       Tmp += getTypeName(Ty->getParamType(I), ParamSign, false);
     PrintComma = true;
