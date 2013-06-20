@@ -27,8 +27,8 @@ autom4te.cache
 cscope.files
 cscope.out
 autoconf/aclocal.m4
-autoconf/autom4te.cache
 compile_commands.json
+projects/sample/autoconf/aclocal.m4
 
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
