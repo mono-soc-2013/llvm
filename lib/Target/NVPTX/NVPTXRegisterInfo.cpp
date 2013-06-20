@@ -57,9 +57,9 @@ std::string getNVPTXRegClassStr(TargetRegisterClass const *RC) {
     return "%f";
   }
   if (RC == &NVPTX::Float64RegsRegClass) {
-    return "%fd";
+    return "%fl";
   } else if (RC == &NVPTX::Int64RegsRegClass) {
-    return "%rd";
+    return "%rl";
   } else if (RC == &NVPTX::Int32RegsRegClass) {
     return "%r";
   } else if (RC == &NVPTX::Int16RegsRegClass) {
@@ -77,8 +77,7 @@ std::string getNVPTXRegClassStr(TargetRegisterClass const *RC) {
 }
 }
 
-NVPTXRegisterInfo::NVPTXRegisterInfo(const TargetInstrInfo &tii,
-                                     const NVPTXSubtarget &st)
+NVPTXRegisterInfo::NVPTXRegisterInfo(const NVPTXSubtarget &st)
     : NVPTXGenRegisterInfo(0), Is64Bit(st.is64Bit()) {}
 
 #define GET_REGINFO_TARGET_DESC

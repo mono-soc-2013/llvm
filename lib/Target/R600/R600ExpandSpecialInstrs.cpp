@@ -38,7 +38,7 @@ private:
 
 public:
   R600ExpandSpecialInstrsPass(TargetMachine &tm) : MachineFunctionPass(ID),
-    TII (static_cast<const R600InstrInfo *>(tm.getInstrInfo())) { }
+    TII(0) { }
 
   virtual bool runOnMachineFunction(MachineFunction &MF);
 
@@ -56,6 +56,7 @@ FunctionPass *llvm::createR600ExpandSpecialInstrsPass(TargetMachine &TM) {
 }
 
 bool R600ExpandSpecialInstrsPass::runOnMachineFunction(MachineFunction &MF) {
+  TII = static_cast<const R600InstrInfo *>(MF.getTarget().getInstrInfo());
 
   const R600RegisterInfo &TRI = TII->getRegisterInfo();
 
@@ -214,7 +215,9 @@ bool R600ExpandSpecialInstrsPass::runOnMachineFunction(MachineFunction &MF) {
               .getReg();
           (void) Src0;
           (void) Src1;
-          assert(TRI.getHWRegChan(Src0) == TRI.getHWRegChan(Src1));
+          if ((TRI.getEncodingValue(Src0) & 0xff) < 127 &&
+              (TRI.getEncodingValue(Src1) & 0xff) < 127)
+            assert(TRI.getHWRegChan(Src0) == TRI.getHWRegChan(Src1));
         }
         MI.eraseFromParent();
         continue;

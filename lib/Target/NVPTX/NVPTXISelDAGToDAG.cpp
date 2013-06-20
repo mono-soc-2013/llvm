@@ -127,38 +127,22 @@ SDNode *NVPTXDAGToDAGISel::Select(SDNode *N) {
 static unsigned int getCodeAddrSpace(MemSDNode *N,
                                      const NVPTXSubtarget &Subtarget) {
   const Value *Src = N->getSrcValue();
+
   if (!Src)
-    return NVPTX::PTXLdStInstCode::LOCAL;
+    return NVPTX::PTXLdStInstCode::GENERIC;
 
   if (const PointerType *PT = dyn_cast<PointerType>(Src->getType())) {
     switch (PT->getAddressSpace()) {
-    case llvm::ADDRESS_SPACE_LOCAL:
-      return NVPTX::PTXLdStInstCode::LOCAL;
-    case llvm::ADDRESS_SPACE_GLOBAL:
-      return NVPTX::PTXLdStInstCode::GLOBAL;
-    case llvm::ADDRESS_SPACE_SHARED:
-      return NVPTX::PTXLdStInstCode::SHARED;
-    case llvm::ADDRESS_SPACE_CONST_NOT_GEN:
-      return NVPTX::PTXLdStInstCode::CONSTANT;
-    case llvm::ADDRESS_SPACE_GENERIC:
-      return NVPTX::PTXLdStInstCode::GENERIC;
-    case llvm::ADDRESS_SPACE_PARAM:
-      return NVPTX::PTXLdStInstCode::PARAM;
-    case llvm::ADDRESS_SPACE_CONST:
-      // If the arch supports generic address space, translate it to GLOBAL
-      // for correctness.
-      // If the arch does not support generic address space, then the arch
-      // does not really support ADDRESS_SPACE_CONST, translate it to
-      // to CONSTANT for better performance.
-      if (Subtarget.hasGenericLdSt())
-        return NVPTX::PTXLdStInstCode::GLOBAL;
-      else
-        return NVPTX::PTXLdStInstCode::CONSTANT;
-    default:
-      break;
+    case llvm::ADDRESS_SPACE_LOCAL: return NVPTX::PTXLdStInstCode::LOCAL;
+    case llvm::ADDRESS_SPACE_GLOBAL: return NVPTX::PTXLdStInstCode::GLOBAL;
+    case llvm::ADDRESS_SPACE_SHARED: return NVPTX::PTXLdStInstCode::SHARED;
+    case llvm::ADDRESS_SPACE_GENERIC: return NVPTX::PTXLdStInstCode::GENERIC;
+    case llvm::ADDRESS_SPACE_PARAM: return NVPTX::PTXLdStInstCode::PARAM;
+    case llvm::ADDRESS_SPACE_CONST: return NVPTX::PTXLdStInstCode::CONSTANT;
+    default: break;
     }
   }
-  return NVPTX::PTXLdStInstCode::LOCAL;
+  return NVPTX::PTXLdStInstCode::GENERIC;
 }
 
 SDNode *NVPTXDAGToDAGISel::SelectLoad(SDNode *N) {
@@ -205,7 +189,8 @@ SDNode *NVPTXDAGToDAGISel::SelectLoad(SDNode *N) {
   //          type is integer
   // Float  : ISD::NON_EXTLOAD or ISD::EXTLOAD and the type is float
   MVT ScalarVT = SimpleVT.getScalarType();
-  unsigned fromTypeWidth = ScalarVT.getSizeInBits();
+  // Read at least 8 bits (predicates are stored as 8-bit values)
+  unsigned fromTypeWidth = std::max(8U, ScalarVT.getSizeInBits());
   unsigned int fromType;
   if ((LD->getExtensionType() == ISD::SEXTLOAD))
     fromType = NVPTX::PTXLdStInstCode::Signed;
@@ -430,7 +415,8 @@ SDNode *NVPTXDAGToDAGISel::SelectLoadVector(SDNode *N) {
   //          type is integer
   // Float  : ISD::NON_EXTLOAD or ISD::EXTLOAD and the type is float
   MVT ScalarVT = SimpleVT.getScalarType();
-  unsigned FromTypeWidth = ScalarVT.getSizeInBits();
+  // Read at least 8 bits (predicates are stored as 8-bit values)
+  unsigned FromTypeWidth = std::max(8U, ScalarVT.getSizeInBits());
   unsigned int FromType;
   // The last operand holds the original LoadSDNode::getExtensionType() value
   unsigned ExtensionType = cast<ConstantSDNode>(

@@ -110,6 +110,12 @@ namespace llvm {
 namespace sys  {
 namespace fs {
 
+TimeValue file_status::getLastModificationTime() {
+  TimeValue Ret;
+  Ret.fromEpochTime(fs_st_mtime);
+  return Ret;
+}
+
 error_code current_path(SmallVectorImpl<char> &result) {
 #ifdef MAXPATHLEN
   result.reserve(MAXPATHLEN);
@@ -236,6 +242,22 @@ error_code remove(const Twine &path, bool &existed) {
   SmallString<128> path_storage;
   StringRef p = path.toNullTerminatedStringRef(path_storage);
 
+  struct stat buf;
+  if (stat(p.begin(), &buf) != 0) {
+    if (errno != errc::no_such_file_or_directory)
+      return error_code(errno, system_category());
+    existed = false;
+    return error_code::success();
+  }
+
+  // Note: this check catches strange situations. In all cases, LLVM should
+  // only be involved in the creation and deletion of regular files.  This
+  // check ensures that what we're trying to erase is a regular file. It
+  // effectively prevents LLVM from erasing things like /dev/null, any block
+  // special file, or other things that aren't "regular" files.
+  if (!S_ISREG(buf.st_mode) && !S_ISDIR(buf.st_mode))
+    return make_error_code(errc::operation_not_permitted);
+
   if (::remove(p.begin()) == -1) {
     if (errno != errc::no_such_file_or_directory)
       return error_code(errno, system_category());
@@ -292,6 +314,26 @@ error_code exists(const Twine &path, bool &result) {
   return error_code::success();
 }
 
+bool can_write(const Twine &Path) {
+  SmallString<128> PathStorage;
+  StringRef P = Path.toNullTerminatedStringRef(PathStorage);
+  return 0 == access(P.begin(), W_OK);
+}
+
+bool can_execute(const Twine &Path) {
+  SmallString<128> PathStorage;
+  StringRef P = Path.toNullTerminatedStringRef(PathStorage);
+
+  if (0 != access(P.begin(), R_OK | X_OK))
+    return false;
+  struct stat buf;
+  if (0 != stat(P.begin(), &buf))
+    return false;
+  if (!S_ISREG(buf.st_mode))
+    return false;
+  return true;
+}
+
 bool equivalent(file_status A, file_status B) {
   assert(status_known(A) && status_known(B));
   return A.fs_st_dev == B.fs_st_dev &&
@@ -317,6 +359,18 @@ error_code file_size(const Twine &path, uint64_t &result) {
     return make_error_code(errc::operation_not_permitted);
 
   result = status.st_size;
+  return error_code::success();
+}
+
+error_code getUniqueID(const Twine Path, uint64_t &Result) {
+  SmallString<128> Storage;
+  StringRef P = Path.toNullTerminatedStringRef(Storage);
+
+  struct stat Status;
+  if (::stat(P.begin(), &Status) != 0)
+    return error_code(errno, system_category());
+
+  Result = Status.st_ino;
   return error_code::success();
 }
 
@@ -353,6 +407,7 @@ error_code status(const Twine &path, file_status &result) {
 
   result.fs_st_dev = status.st_dev;
   result.fs_st_ino = status.st_ino;
+  result.fs_st_mtime = status.st_mtime;
 
   return error_code::success();
 }
@@ -646,7 +701,7 @@ error_code get_magic(const Twine &path, uint32_t len,
   if (std::ferror(file) != 0) {
     std::fclose(file);
     return error_code(errno, system_category());
-  } else if (size != result.size()) {
+  } else if (size != len) {
     if (std::feof(file) != 0) {
       std::fclose(file);
       result.set_size(size);
@@ -654,7 +709,7 @@ error_code get_magic(const Twine &path, uint32_t len,
     }
   }
   std::fclose(file);
-  result.set_size(len);
+  result.set_size(size);
   return error_code::success();
 }
 

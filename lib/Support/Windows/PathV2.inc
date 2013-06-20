@@ -128,6 +128,16 @@ namespace llvm {
 namespace sys  {
 namespace fs {
 
+TimeValue file_status::getLastModificationTime() {
+  ULARGE_INTEGER UI;
+  UI.LowPart = LastWriteTimeLow;
+  UI.HighPart = LastWriteTimeHigh;
+
+  TimeValue Ret;
+  Ret.fromWin32Time(UI.QuadPart);
+  return Ret;
+}
+
 error_code current_path(SmallVectorImpl<char> &result) {
   SmallVector<wchar_t, 128> cur_path;
   cur_path.reserve(128);
@@ -362,6 +372,29 @@ error_code exists(const Twine &path, bool &result) {
   return error_code::success();
 }
 
+bool can_write(const Twine &Path) {
+  // FIXME: take security attributes into account.
+  SmallString<128> PathStorage;
+  SmallVector<wchar_t, 128> PathUtf16;
+
+  if (UTF8ToUTF16(Path.toStringRef(PathStorage), PathUtf16))
+    return false;
+
+  DWORD Attr = ::GetFileAttributesW(PathUtf16.begin());
+  return (Attr != INVALID_FILE_ATTRIBUTES) && !(Attr & FILE_ATTRIBUTE_READONLY);
+}
+
+bool can_execute(const Twine &Path) {
+  SmallString<128> PathStorage;
+  SmallVector<wchar_t, 128> PathUtf16;
+
+  if (UTF8ToUTF16(Path.toStringRef(PathStorage), PathUtf16))
+    return false;
+
+  DWORD Attr = ::GetFileAttributesW(PathUtf16.begin());
+  return Attr != INVALID_FILE_ATTRIBUTES;
+}
+
 bool equivalent(file_status A, file_status B) {
   assert(status_known(A) && status_known(B));
   return A.FileIndexHigh      == B.FileIndexHigh &&
@@ -398,6 +431,25 @@ error_code file_size(const Twine &path, uint64_t &result) {
   result =
     (uint64_t(FileData.nFileSizeHigh) << (sizeof(FileData.nFileSizeLow) * 8))
     + FileData.nFileSizeLow;
+
+  return error_code::success();
+}
+
+error_code getUniqueID(const Twine Path, uint64_t &Result) {
+  file_status Status;
+  if (error_code E = status(Path, Status))
+    return E;
+
+  // The file is uniquely identified by the volume serial number along
+  // with the 64-bit file identifier.
+  Result = (static_cast<uint64_t>(Status.FileIndexHigh) << 32ULL) |
+           static_cast<uint64_t>(Status.FileIndexLow);
+  
+  // Because the serial number is 32-bits, but we've already used up all 64
+  // bits for the file index, XOR the serial number into the high 32 bits of
+  // the resulting value.  We could potentially get collisons from this, but
+  // the likelihood is low.
+  Result ^= (static_cast<uint64_t>(Status.VolumeSerialNumber) << 32ULL);
 
   return error_code::success();
 }

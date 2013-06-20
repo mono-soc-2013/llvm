@@ -133,8 +133,7 @@ namespace {
   public:
     static char ID;
     SystemZLongBranch(const SystemZTargetMachine &tm)
-      : MachineFunctionPass(ID),
-        TII(static_cast<const SystemZInstrInfo *>(tm.getInstrInfo())) {}
+      : MachineFunctionPass(ID), TII(0) {}
 
     virtual const char *getPassName() const {
       return "SystemZ Long Branch";
@@ -227,6 +226,11 @@ TerminatorInfo SystemZLongBranch::describeTerminator(MachineInstr *MI) {
       break;
     case SystemZ::CGRJ:
       // Relaxes to a CGR/BRCL sequence, which is 4 bytes longer.
+      Terminator.ExtraRelaxSize = 4;
+      break;
+    case SystemZ::CIJ:
+    case SystemZ::CGIJ:
+      // Relaxes to a C(G)HI/BRCL sequence, which is 4 bytes longer.
       Terminator.ExtraRelaxSize = 4;
       break;
     default:
@@ -361,6 +365,12 @@ void SystemZLongBranch::relaxBranch(TerminatorInfo &Terminator) {
   case SystemZ::CGRJ:
     splitCompareBranch(Branch, SystemZ::CGR);
     break;
+  case SystemZ::CIJ:
+    splitCompareBranch(Branch, SystemZ::CHI);
+    break;
+  case SystemZ::CGIJ:
+    splitCompareBranch(Branch, SystemZ::CGHI);
+    break;
   default:
     llvm_unreachable("Unrecognized branch");
   }
@@ -391,6 +401,7 @@ void SystemZLongBranch::relaxBranches() {
 }
 
 bool SystemZLongBranch::runOnMachineFunction(MachineFunction &F) {
+  TII = static_cast<const SystemZInstrInfo *>(F.getTarget().getInstrInfo());
   MF = &F;
   uint64_t Size = initMBBInfo();
   if (Size <= MaxForwardRange || !mustRelaxABranch())

@@ -11,16 +11,16 @@
 //  Declarations that describe the MIPS register file
 //===----------------------------------------------------------------------===//
 let Namespace = "Mips" in {
-def sub_fpeven : SubRegIndex;
-def sub_fpodd  : SubRegIndex;
-def sub_32     : SubRegIndex;
-def sub_lo     : SubRegIndex;
-def sub_hi     : SubRegIndex;
-def sub_dsp16_19 : SubRegIndex;
-def sub_dsp20    : SubRegIndex;
-def sub_dsp21    : SubRegIndex;
-def sub_dsp22    : SubRegIndex;
-def sub_dsp23    : SubRegIndex;
+def sub_fpeven : SubRegIndex<32>;
+def sub_fpodd  : SubRegIndex<32, 32>;
+def sub_32     : SubRegIndex<32>;
+def sub_lo     : SubRegIndex<32>;
+def sub_hi     : SubRegIndex<32, 32>;
+def sub_dsp16_19 : SubRegIndex<4, 16>;
+def sub_dsp20    : SubRegIndex<1, 20>;
+def sub_dsp21    : SubRegIndex<1, 21>;
+def sub_dsp22    : SubRegIndex<1, 22>;
+def sub_dsp23    : SubRegIndex<1, 23>;
 }
 
 class Unallocatable {
@@ -388,17 +388,21 @@ def ACRegsDSP : RegisterClass<"Mips", [untyped], 64, (sequence "AC%u", 0, 3)> {
 def DSPCC : RegisterClass<"Mips", [v4i8, v2i16], 32, (add DSPCCond)>;
 
 // Register Operands.
-def CPURegsAsmOperand : AsmOperandClass {
+
+class MipsAsmRegOperand : AsmOperandClass {
+  let RenderMethod = "addRegAsmOperands";
+}
+def CPURegsAsmOperand : MipsAsmRegOperand {
   let Name = "CPURegsAsm";
   let ParserMethod = "parseCPURegs";
 }
 
-def CPU64RegsAsmOperand : AsmOperandClass {
+def CPU64RegsAsmOperand : MipsAsmRegOperand {
   let Name = "CPU64RegsAsm";
   let ParserMethod = "parseCPU64Regs";
 }
 
-def CCRAsmOperand : AsmOperandClass {
+def CCRAsmOperand : MipsAsmRegOperand {
   let Name = "CCRAsm";
   let ParserMethod = "parseCCRRegs";
 }
@@ -415,12 +419,12 @@ def CCROpnd : RegisterOperand<CCR, "printCPURegs"> {
   let ParserMatchClass = CCRAsmOperand;
 }
 
-def HWRegsAsmOperand : AsmOperandClass {
+def HWRegsAsmOperand : MipsAsmRegOperand {
   let Name = "HWRegsAsm";
   let ParserMethod = "parseHWRegs";
 }
 
-def HW64RegsAsmOperand : AsmOperandClass {
+def HW64RegsAsmOperand : MipsAsmRegOperand {
   let Name = "HW64RegsAsm";
   let ParserMethod = "parseHW64Regs";
 }

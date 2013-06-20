@@ -467,6 +467,7 @@ void Verifier::visitGlobalVariable(GlobalVariable &GV) {
           Assert1(
               isa<GlobalVariable>(V) || isa<Function>(V) || isa<GlobalAlias>(V),
               "invalid llvm.used member", V);
+          Assert1(V->hasName(), "members of llvm.used must be named", V);
         }
       }
     }
@@ -694,11 +695,11 @@ void Verifier::VerifyAttributeTypes(AttributeSet Attrs, unsigned Idx,
         I->getKindAsEnum() == Attribute::NoBuiltin ||
         I->getKindAsEnum() == Attribute::Cold) {
       if (!isFunction)
-          CheckFailed("Attribute '" + I->getKindAsString() +
+          CheckFailed("Attribute '" + I->getAsString() +
                       "' only applies to functions!", V);
           return;
     } else if (isFunction) {
-        CheckFailed("Attribute '" + I->getKindAsString() +
+        CheckFailed("Attribute '" + I->getAsString() +
                     "' does not apply to functions!", V);
         return;
     }
@@ -1956,7 +1957,7 @@ void Verifier::visitInstruction(Instruction &I) {
     Value *Op0 = MD->getOperand(0);
     if (ConstantFP *CFP0 = dyn_cast_or_null<ConstantFP>(Op0)) {
       APFloat Accuracy = CFP0->getValueAPF();
-      Assert1(Accuracy.isNormal() && !Accuracy.isNegative(),
+      Assert1(Accuracy.isFiniteNonZero() && !Accuracy.isNegative(),
               "fpmath accuracy not a positive number!", &I);
     } else {
       Assert1(false, "invalid fpmath accuracy!", &I);
