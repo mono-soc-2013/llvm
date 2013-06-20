@@ -1001,11 +1001,15 @@ std::string MSILWriter::getCallSignature(const FunctionType* Ty,
   bool isManaged = CallType != CLI_Native;
 
   llvm::SmallVector<unsigned, 4> GenericParams;
-  bool HasGenericParams = GetCLIGenericParameter(Ty, Inst, GenericParams,
-    CallType);
+  bool HasGenericParams = false;
 
   llvm::SmallVector<unsigned, 4> Signedness;
-  bool HasSignedness = GetCLISignednessParameter(Ty, Signedness);
+  bool HasSignedness = false;
+  
+  if (isManaged) {
+    HasGenericParams = GetCLIGenericParameter(Ty, Inst, GenericParams, CallType);
+    HasSignedness = GetCLISignednessParameter(Ty, Signedness);
+  }
 
   std::string Tmp("");
   if (Ty->isVarArg()) Tmp += "vararg ";
