@@ -307,16 +307,6 @@ static int compileModule(char **argv, LLVMContext &Context) {
       TheTriple.isMacOSXVersionLT(10, 6))
     Target.setMCUseLoc(false);
 
-  // What?
-  //if (ExceptionHandlingModel != ExceptionHandling::Default)
-  //  Target.setExceptionHandlingModel(ExceptionHandlingModel);
-
-  if (Target.getExceptionHandlingModel() == ExceptionHandling::Win64
-      && !TheTriple.isArch64Bit()) {
-    errs() << argv[0]
-           << ": warning: Win64 EH incompatible with non 64-bit arch\n";
-  }
-
   // Figure out where we are going to send the output.
   OwningPtr<tool_output_file> Out
     (GetOutputStream(TheTarget->getName(), TheTriple.getOS(), argv[0]));
