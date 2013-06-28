@@ -1,4 +1,4 @@
-//===-- MSILTargetInfo.cpp - MSIL Target Implementation -------------------===//
+//===-- CILTargetInfo.cpp - CIL Target Implementation -------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,17 +7,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MSILBackend.h"
-#include "MSILTargetMachine.h"
+#include "CILBackend.h"
+#include "CILTargetMachine.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/TargetRegistry.h"
+
 using namespace llvm;
 
-Target llvm::TheMSILTarget;
+Target llvm::TheCILTarget;
 
-extern "C" void LLVMInitializeMSILTargetInfo() {
+extern "C" void LLVMInitializeCILTargetInfo()
+{
   RegisterTarget<Triple::cil, /*HasJIT=*/false>
-    X(TheMSILTarget, "msil", "Common Intermediate Language");
+    X(TheCILTarget, "cil", "Common Intermediate Language");
 }
 
-extern "C" void LLVMInitializeMSILTargetMC() {}
+extern "C" void LLVMInitializeCILTargetMC()
+{
+}
