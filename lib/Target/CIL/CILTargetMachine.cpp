@@ -20,10 +20,12 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/CodeGen/Passes.h"
 #include <iostream>
+#include <string>
 
 using namespace llvm;
 
@@ -48,12 +50,10 @@ bool CILTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
                                            AnalysisID StartAfter,
                                            AnalysisID StopAfter)
 {
-  formatted_raw_ostream *Out = &O;
-
-  std::cout << "addPassesToEmitFile\n";
-
   if (FileType != TargetMachine::CGFT_AssemblyFile)
     return true;
+
+  O << "addPassesToEmitFile\n";
 
   return false;
 }
