@@ -24,17 +24,17 @@ struct CILTargetMachine : public TargetMachine
                   StringRef CPU, StringRef FS,
                   const TargetOptions &Options,
                   Reloc::Model RM, CodeModel::Model CM,
-                  CodeGenOpt::Level OL);
-
-  virtual const DataLayout *getDataLayout() const;
+                  CodeGenOpt::Level OL)
+   : TargetMachine(T, TT, CPU, FS, Options)
+  {
+  }
 
   virtual bool addPassesToEmitFile(PassManagerBase &PM,
                                    formatted_raw_ostream &Out,
                                    CodeGenFileType FileType,
                                    bool DisableVerify,
                                    AnalysisID StartAfter,
-                                   AnalysisID StopAfter)
-    override;
+                                   AnalysisID StopAfter);
 };
 
 extern Target TheCILTarget;

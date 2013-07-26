@@ -11,518 +11,143 @@
 #ifndef CILINSTRUCTIONS_H
 #define CILINSTRUCTIONS_H
 
-#include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/DataTypes.h"
+#include "llvm/Support/raw_ostream.h"
+#include <functional>
 
-namespace llvm
-{
+namespace llvm {
+namespace cil {
 
-namespace cil
-{
-
-class Instr
+class Instruction
 {
 protected:
-  char *Name;
-  unsigned short Opcode;
+  unsigned Opcode;
+  const char *OpcodeName;
+
+  std::function<void(raw_ostream &)> Print;
 
 public:
-  const char *name() const;
-  unsigned short opcode() const;
+  unsigned getOpcode() const;
+  StringRef getOpcodeName() const;
 
-  virtual void print(formatted_raw_ostream &Stream) const = 0;
+  void print(raw_ostream &O) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class Nop : public Instr
+class Alloca : public Instruction
 {
 public:
-  Nop();
-
-  void print(formatted_raw_ostream &Stream) const;
+  Alloca();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class LoadArg : public Instr
+class LoadConst_Int32 : public Instruction
 {
-  unsigned short N;
+  int32_t X;
 
 public:
-  LoadArg(unsigned short N);
-
-  void print(formatted_raw_ostream &Stream) const;
+  LoadConst_Int32(int32_t X);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class LoadArgAddr : public Instr
+class LoadConst_Int64 : public Instruction
 {
-  unsigned short N;
+  int64_t X;
 
 public:
-  LoadArgAddr(unsigned short N);
-
-  void print(formatted_raw_ostream &Stream) const;
+  LoadConst_Int64(int64_t X);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class LoadLocal : public Instr
+class LoadConst_Float32 : public Instruction
 {
-  unsigned short N;
+  float X;
 
 public:
-  LoadLocal(unsigned short N);
-
-  void print(formatted_raw_ostream &Stream) const;
+  LoadConst_Float32(float X);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class LoadInt32 : public Instr
+class LoadConst_Float64 : public Instruction
 {
-  long I;
+  double X;
 
 public:
-  LoadInt32(long I);
-
-  void print(formatted_raw_ostream &Stream) const;
+  LoadConst_Float64(double X);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class LoadInt64 : public Instr
+class LoadArg : public Instruction
 {
-  long long I;
+  uint16_t Index;
 
 public:
-  LoadInt64(long long I);
-
-  void print(formatted_raw_ostream &Stream) const;
+  LoadArg(uint16_t Index);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class LoadFloat32 : public Instr
+class LoadLocal : public Instruction
 {
-  float F;
+  uint16_t Index;
 
 public:
-  LoadFloat32(float I);
-
-  void print(formatted_raw_ostream &Stream) const;
+  LoadLocal(uint16_t Index);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class LoadFloat64 : public Instr
+class StoreLocal : public Instruction
 {
-  double F;
+  uint16_t Index;
 
 public:
-  LoadFloat64(double F);
-
-  void print(formatted_raw_ostream &Stream) const;
+  StoreLocal(uint16_t Index);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class IndLoadInt : public Instr
+class Add : public Instruction
 {
 public:
-  IndLoadInt();
-
-  void print(formatted_raw_ostream &Stream) const;
+  Add(bool Overflow = false, bool Unsigned = false);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class IndLoadInt8 : public Instr
+class Sub : public Instruction
 {
 public:
-  IndLoadInt8();
-
-  void print(formatted_raw_ostream &Stream) const;
+  Sub(bool Overflow = false, bool Unsigned = false);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class IndLoadUInt8 : public Instr
+class Mul : public Instruction
 {
 public:
-  IndLoadUInt8();
-
-  void print(formatted_raw_ostream &Stream) const;
+  Mul(bool Overflow = false, bool Unsigned = false);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class IndLoadInt16 : public Instr
+class Div : public Instruction
 {
 public:
-  IndLoadInt16();
-
-  void print(formatted_raw_ostream &Stream) const;
+  Div(bool Unsigned = false);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class IndLoadUInt16 : public Instr
+class Rem : public Instruction
 {
 public:
-  IndLoadUInt16();
-
-  void print(formatted_raw_ostream &Stream) const;
+  Rem(bool Unsigned = false);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-class IndLoadInt32 : public Instr
-{
-public:
-  IndLoadInt32();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndLoadUInt32 : public Instr
-{
-public:
-  IndLoadUInt32();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndLoadInt64 : public Instr
-{
-public:
-  IndLoadInt64();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndLoadFloat32 : public Instr
-{
-public:
-  IndLoadFloat32();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndLoadFloat64 : public Instr
-{
-public:
-  IndLoadFloat64();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndLoadRef : public Instr
-{
-public:
-  IndLoadRef();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class StoreArg : public Instr
-{
-  unsigned short N;
-
-public:
-  StoreArg(unsigned short N);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class StoreLocal : public Instr
-{
-  unsigned short N;
-
-public:
-  StoreLocal(unsigned short N);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndStoreInt : public Instr
-{
-public:
-  IndStoreInt();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndStoreInt8 : public Instr
-{
-public:
-  IndStoreInt8();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndStoreInt16 : public Instr
-{
-public:
-  IndStoreInt16();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndStoreInt32 : public Instr
-{
-public:
-  IndStoreInt32();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndStoreInt64 : public Instr
-{
-public:
-  IndStoreInt64();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndStoreFloat32 : public Instr
-{
-public:
-  IndStoreFloat32();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndStoreFloat64 : public Instr
-{
-public:
-  IndStoreFloat64();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class IndStoreRef : public Instr
-{
-public:
-  IndStoreRef();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Branch : public Instr
-{
-  long Offset;
-
-public:
-  Branch(long Offset);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class BranchFalse : public Instr
-{
-  long Offset;
-
-public:
-  BranchFalse(long Offset);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class BranchTrue : public Instr
-{
-  long Offset;
-
-public:
-  BranchTrue(long Offset);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class BranchEQ : public Instr
-{
-  long Offset;
-
-public:
-  BranchEQ(long Offset);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class BranchNE : public Instr
-{
-  long Offset;
-
-public:
-  BranchNE(long Offset);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class BranchGE : public Instr
-{
-  long Offset;
-  bool Un;
-
-public:
-  BranchGE(long Offset, bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class BranchGT : public Instr
-{
-  long Offset;
-  bool Un;
-
-public:
-  BranchGT(long Offset, bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class BranchLE : public Instr
-{
-  long Offset;
-  bool Un;
-
-public:
-  BranchLE(long Offset, bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class BranchLT : public Instr
-{
-  long Offset;
-  bool Un;
-
-public:
-  BranchLT(long Offset, bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Break : public Instr
-{
-public:
-  Break();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Leave : public Instr
-{
-public:
-  Leave(long Offset);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Ret : public Instr
+class Ret : public Instruction
 {
 public:
   Ret();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Dup : public Instr
-{
-public:
-  Dup();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Pop : public Instr
-{
-public:
-  Pop();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Add : public Instr
-{
-public:
-  Add(bool Ovf = false, bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Sub : public Instr
-{
-public:
-  Sub(bool Ovf = false, bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Mul : public Instr
-{
-public:
-  Mul(bool Ovf = false, bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Div : public Instr
-{
-public:
-  Div(bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Rem : public Instr
-{
-public:
-  Rem(bool Un = false);
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Neg : public Instr
-{
-public:
-  Neg();
-
-  void print(formatted_raw_ostream &Stream) const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-class Add : public Instr
-{
-public:
-  Add();
-
-  void print(formatted_raw_ostream &Stream) const;
 };
 
 }
+
+raw_ostream &operator<<(raw_ostream &O, cil::Instruction &Inst);
 
 }
 

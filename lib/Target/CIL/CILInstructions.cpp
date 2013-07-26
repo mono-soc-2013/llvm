@@ -13,569 +13,325 @@
 
 using namespace llvm;
 
-const char *cil::Instr::name() const
-{
-  return Name;
-}
-
-unsigned short opcode() const
+unsigned cil::Instruction::getOpcode() const
 {
   return Opcode;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-cil::Nop::Nop()
+StringRef cil::Instruction::getOpcodeName() const
 {
-  Name = "nop";
-  Opcode = 0x00;
+  return StringRef(OpcodeName);
+}
+
+void cil::Instruction::print(raw_ostream &O) const
+{
+  Print(O);
+}
+
+raw_ostream &operator<<(raw_ostream &O, cil::Instruction &Inst)
+{
+  Inst.print(O);
+  return O;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-cil::LoadArg::LoadArg(unsigned short N)
-  : N(N)
+cil::Alloca::Alloca()
 {
-  if (N == 0) {
-    Name = "ldarg.0";
+  Opcode = 0xFE0F;
+  OpcodeName = "localloc";
+  Print = [&](raw_ostream &O) { O << OpcodeName; };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+cil::LoadConst_Int32::LoadConst_Int32(int32_t X)
+  : X(X)
+{
+  if (X == -1) {
+    Opcode = 0x15;
+    OpcodeName = "ldc.i4.m1";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 0) {
+    Opcode = 0x16;
+    OpcodeName = "ldc.i4.0";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 1) {
+    Opcode = 0x17;
+    OpcodeName = "ldc.i4.1";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 2) {
+    Opcode = 0x18;
+    OpcodeName = "ldc.i4.2";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 3) {
+    Opcode = 0x19;
+    OpcodeName = "ldc.i4.3";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 4) {
+    Opcode = 0x1A;
+    OpcodeName = "ldc.i4.4";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 5) {
+    Opcode = 0x1B;
+    OpcodeName = "ldc.i4.5";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 6) {
+    Opcode = 0x1C;
+    OpcodeName = "ldc.i4.6";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 7) {
+    Opcode = 0x1D;
+    OpcodeName = "ldc.i4.7";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (X == 8) {
+    Opcode = 0x1E;
+    OpcodeName = "ldc.i4.8";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
+  }
+  else if (-128 <= X && X < 128) {
+    Opcode = 0x1F;
+    OpcodeName = "ldc.i4.s";
+    Print = [&, X](raw_ostream &O) { O << OpcodeName << " " << X; };
+  }
+  else {
+    Opcode = 0x20;
+    OpcodeName = "ldc.i4";
+    Print = [&, X](raw_ostream &O) { O << OpcodeName << " " << X; };
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+cil::LoadConst_Int64::LoadConst_Int64(int64_t X)
+  : X(X)
+{
+  Opcode = 0x21;
+  OpcodeName = "ldc.i8";
+  Print = [&, X](raw_ostream &O) { O << OpcodeName << " " << X; };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+cil::LoadConst_Float32::LoadConst_Float32(float X)
+  : X(X)
+{
+  Opcode = 0x22;
+  OpcodeName = "ldc.r4";
+  Print = [&, X](raw_ostream &O) { O << OpcodeName << " " << X; };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+cil::LoadConst_Float64::LoadConst_Float64(double X)
+  : X(X)
+{
+  Opcode = 0x23;
+  OpcodeName = "ldc.r8";
+  Print = [&, X](raw_ostream &O) { O << OpcodeName << " " << X; };
+}
+
+////////////////////////////////////////////////////////////////////////////////
+cil::LoadArg::LoadArg(uint16_t Index)
+  : Index(Index)
+{
+  if (Index == 0) {
     Opcode = 0x02;
+    OpcodeName = "ldarg.0";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 1) {
-    Name = "ldarg.1";
-    Opcode = 0x03
+  else if (Index == 1) {
+    Opcode = 0x03;
+    OpcodeName = "ldarg.1";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 2) {
-    Name = "ldarg.2";
+  else if (Index == 2) {
     Opcode = 0x04;
+    OpcodeName = "ldarg.2";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 3) {
-    Name = "ldarg.3";
+  else if (Index == 3) {
     Opcode = 0x05;
+    OpcodeName = "ldarg.3";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N <= 255) {
-    Name = "ldarg.s";
+  else if (Index < 256) {
     Opcode = 0x0E;
+    OpcodeName = "ldarg.s";
+    Print = [&, Index](raw_ostream &O) { O << OpcodeName << " " << Index; };
   }
   else {
-    Name = "ldarg";
     Opcode = 0xFE09;
+    OpcodeName = "ldarg";
+    Print = [&, Index](raw_ostream &O) { O << OpcodeName << " " << Index; };
   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-cil::LoadArgAddr::LoadArgAddr(unsigned short N)
-  : N(N)
+cil::LoadLocal::LoadLocal(uint16_t Index)
+  : Index(Index)
 {
-  if (N <= 255) {
-    Name = "ldarga.s";
-    Opcode = 0x0F;
-  }
-  else {
-    Name = "ldarga";
-    Opcode = 0xFE0A;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::LoadLocal::LoadLocal(unsigned short N)
-  : N(N)
-{
-  if (N == 0) {
-    Name = "ldloc.0";
+  if (Index == 0) {
     Opcode = 0x06;
+    OpcodeName = "ldloc.0";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 1) {
-    Name = "ldloc.1";
+  else if (Index == 1) {
     Opcode = 0x07;
+    OpcodeName = "ldloc.1";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 2) {
-    Name = "ldloc.2";
+  else if (Index == 2) {
     Opcode = 0x08;
+    OpcodeName = "ldloc.2";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 3) {
-    Name = "ldloc.3";
+  else if (Index == 3) {
     Opcode = 0x09;
+    OpcodeName = "ldloc.3";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N <= 255) {
-    Name = "ldloc.s";
+  else if (Index < 256) {
     Opcode = 0x11;
+    OpcodeName = "ldloc.s";
+    Print = [&, Index](raw_ostream &O) { O << OpcodeName << " " << Index; };
   }
   else {
-    Name = "ldloc";
     Opcode = 0xFE0C;
+    OpcodeName = "ldloc";
+    Print = [&, Index](raw_ostream &O) { O << OpcodeName << " " << Index; };
   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-cil::LoadInt32::LoadInt32(long I)
-  : I(I)
+cil::StoreLocal::StoreLocal(uint16_t Index)
+  : Index(Index)
 {
-  if (I == -1) {
-    name = "ldc.i4.m1";
-    opcode = 0x15;
-  }
-  else if (I == 0) {
-    name = "ldc.i4.0";
-    opcode = 0x16;
-  }
-  else if (I == 1) {
-    name = "ldc.i4.1";
-    opcode = 0x17;
-  }
-  else if (I == 2) {
-    name = "ldc.i4.2";
-    opcode = 0x18;
-  }
-  else if (I == 3) {
-    name = "ldc.i4.3";
-    opcode = 0x19;
-  }
-  else if (I == 4) {
-    name = "ldc.i4.4";
-    opcode = 0x1A;
-  }
-  else if (I == 5) {
-    name = "ldc.i4.5";
-    opcode = 0x1B;
-  }
-  else if (I == 6) {
-    name = "ldc.i4.6";
-    opcode = 0x1C;
-  }
-  else if (I == 7) {
-    name = "ldc.i4.7";
-    opcode = 0x1D;
-  }
-  else if (I == 8) {
-    name = "ldc.i4.8";
-    opcode = 0x1E;
-  }
-  else if (-128 <= I && I <= 127) {
-    name = "ldc.i4.s";
-    opcode = 0x1F;
-  }
-  else {
-    name = "ldc.i4";
-    opcode = 0x20;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::LoadInt64::LoadInt64(long long I)
-  : I(I)
-{
-  name = "ldc.i8";
-  opcode = 0x21;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::LoadFloat32::LoadFloat32(float F)
-  : F(F)
-{
-  name = "ldc.r4";
-  opcode = 0x22;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::LoadFloat64::LoadFloat64(float F)
-  : F(F)
-{
-  name = "ldc.r8";
-  opcode = 0x23;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadInt::IndLoadInt()
-{
-  name = "ldind.i";
-  opcode = 0x4D;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadInt8::IndLoadInt8()
-{
-  name = "ldind.i1";
-  opcode = 0x46;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadUInt8::IndLoadUInt8()
-{
-  name = "ldind.u1";
-  opcode = 0x47;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadInt16::IndLoadInt16()
-{
-  name = "ldind.i2";
-  opcode = 0x48;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadUInt16::IndLoadUInt16()
-{
-  name = "ldind.u2";
-  opcode = 0x49;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadInt32::IndLoadInt32()
-{
-  name = "ldind.i4";
-  opcode = 0x4A;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadUInt32::IndLoadUInt32()
-{
-  name = "ldind.u4";
-  opcode = 0x4B;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadInt64::IndLoadInt64()
-{
-  name = "ldind.i8";
-  opcode = 0x4C;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadFloat32::IndLoadFloat32()
-{
-  name = "ldind.r4";
-  opcode = 0x4E;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadFloat64::IndLoadFloat64()
-{
-  name = "ldind.r8";
-  opcode = 0x4F;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndLoadRef::IndLoadRef()
-{
-  name = "ldind.ref";
-  opcode = 0x50;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::StoreArg::StoreArg(unsigned short N)
-  : N(N)
-{
-  if (N <= 255) {
-    Name = "starg.s";
-    Opcode = 0x10;
-  }
-  else {
-    Name = "starg";
-    Opcode = 0xFE0B;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::StoreLocal::StoreLocal(unsigned short N)
-  : N(N)
-{
-  if (N == 0) {
-    Name = "stloc.0";
+  if (Index == 0) {
     Opcode = 0x0A;
+    OpcodeName = "stloc.0";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 1) {
-    Name = "stloc.1";
+  else if (Index == 1) {
     Opcode = 0x0B;
+    OpcodeName = "stloc.1";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 2) {
-    Name = "stloc.2";
+  else if (Index == 2) {
     Opcode = 0x0C;
+    OpcodeName = "stloc.2";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N == 3) {
-    Name = "stloc.3";
+  else if (Index == 3) {
     Opcode = 0x0D;
+    OpcodeName = "stloc.3";
+    Print = [&](raw_ostream &O) { O << OpcodeName; };
   }
-  else if (N <= 255) {
-    Name = "stloc.s";
+  else if (Index < 256) {
     Opcode = 0x13;
+    OpcodeName = "stloc.s";
+    Print = [&, Index](raw_ostream &O) { O << OpcodeName << " " << Index; };
   }
   else {
-    Name = "stloc";
     Opcode = 0xFE0E;
+    OpcodeName = "stloc";
+    Print = [&, Index](raw_ostream &O) { O << OpcodeName << " " << Index; };
   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-cil::IndStoreInt::IndStoreInt()
+cil::Add::Add(bool Overflow, bool Unsigned)
 {
-  name = "stind.i";
-  opcode = 0xDF;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndStoreInt8::IndStoreInt8()
-{
-  name = "stind.i1";
-  opcode = 0x52;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndStoreInt16::IndStoreInt16()
-{
-  name = "stind.i2";
-  opcode = 0x53;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndStoreInt32::IndStoreInt32()
-{
-  name = "stind.i4";
-  opcode = 0x54;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndStoreInt64::IndStoreInt64()
-{
-  name = "stind.i8";
-  opcode = 0x55;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndStoreFloat32::IndStoreFloat32()
-{
-  name = "stind.r4";
-  opcode = 0x56;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndStoreFloat64::IndStoreFloat64()
-{
-  name = "stind.i8";
-  opcode = 0x57;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::IndStoreRef::IndStoreRef()
-{
-  name = "stind.ref";
-  opcode = 0x51;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::Branch::Branch(long Offset)
-  : Offset(Offset)
-{
-  if (-128 <= Offset && Offset <= 127) {
-    Name = "br.s";
-    Opcode = 0x2B;
-  }
-  else {
-    Name = "br";
-    Opcode = 0x38;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::BranchFalse::BranchFalse(long Offset)
-  : Offset(Offset)
-{
-  if (-128 <= Offset && Offset <= 127) {
-    Name = "brfalse.s";
-    Opcode = 0x2C;
-  }
-  else {
-    Name = "brfalse";
-    Opcode = 0x39;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::BranchTrue::BranchTrue(long Offset)
-  : Offset(Offset)
-{
-  if (-128 <= Offset && Offset <= 127) {
-    Name = "brtrue.s";
-    Opcode = 0x2D;
-  }
-  else {
-    Name = "brtrue";
-    Opcode = 0x3A;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::BranchEQ::BranchEQ(long Offset)
-  : Offset(Offset)
-{
-  if (-128 <= Offset && Offset <= 127) {
-    Name = "beq.s";
-    Opcode = 0x2E;
-  }
-  else {
-    Name = "beq";
-    Opcode = 0x3B;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::BranchNE::BranchNE(long Offset)
-  : Offset(Offset)
-{
-  if (-128 <= Offset && Offset <= 127) {
-    Name = "bne.un.s";
-    Opcode = 0x33;
-  }
-  else {
-    Name = "bne.un";
-    Opcode = 0x40;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::BranchGE::BranchGE(long Offset, bool Un)
-  : Offset(Offset)
-  , Un(Un)
-{
-  if (-128 <= Offset && Offset <= 127) {
-    if (Un) {
-      Name = "bge.un.s";
-      Opcode = 0x34;
+  if (Overflow)
+    if (Unsigned) {
+      Opcode = 0xD7;
+      OpcodeName = "add.ovf.un";
     }
     else {
-      Name = "bge.s";
-      Opcode = 0x2F;
+      Opcode = 0xD6;
+      OpcodeName = "add.ovf";
     }
-  }
   else {
-    if (Un) {
-      Name = "bge.un";
-      Opcode = 0x41;
-    }
-    else {
-      Name = "bge";
-      Opcode = 0x3C;
-    }
+    Opcode = 0x58;
+    OpcodeName = "add";
   }
+  Print = [&](raw_ostream &O) { O << OpcodeName; };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-cil::BranchGT::BranchGT(long Offset, bool Un)
-  : Offset(Offset)
-  , Un(Un)
+cil::Sub::Sub(bool Overflow, bool Unsigned)
 {
-  if (-128 <= Offset && Offset <= 127) {
-    if (Un) {
-      Name = "bgt.un.s";
-      Opcode = 0x35;
+  if (Overflow)
+    if (Unsigned) {
+      Opcode = 0xDB;
+      OpcodeName = "sub.ovf.un";
     }
     else {
-      Name = "bgt.s";
-      Opcode = 0x30;
+      Opcode = 0xDA;
+      OpcodeName = "sub.ovf";
     }
-  }
   else {
-    if (Un) {
-      Name = "bgt.un";
-      Opcode = 0x42;
-    }
-    else {
-      Name = "bgt";
-      Opcode = 0x3D;
-    }
+    Opcode = 0x59;
+    OpcodeName = "sub";
   }
+  Print = [&](raw_ostream &O) { O << OpcodeName; };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-cil::BranchLE::BranchLE(long Offset, bool Un)
-  : Offset(Offset)
-  , Un(Un)
+cil::Mul::Mul(bool Overflow, bool Unsigned)
 {
-  if (-128 <= Offset && Offset <= 127) {
-    if (Un) {
-      Name = "ble.un.s";
-      Opcode = 0x36;
+  if (Overflow)
+    if (Unsigned) {
+      Opcode = 0xD9;
+      OpcodeName = "mul.ovf.un";
     }
     else {
-      Name = "ble.s";
-      Opcode = 0x31;
+      Opcode = 0xD8;
+      OpcodeName = "mul.ovf";
     }
-  }
   else {
-    if (Un) {
-      Name = "ble.un";
-      Opcode = 0x43;
-    }
-    else {
-      Name = "ble";
-      Opcode = 0x3E;
-    }
+    Opcode = 0x5A;
+    OpcodeName = "mul";
   }
+  Print = [&](raw_ostream &O) { O << OpcodeName; };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-cil::BranchLT::BranchLT(long Offset, bool Un)
-  : Offset(Offset)
-  , Un(Un)
+cil::Div::Div(bool Unsigned)
 {
-  if (-128 <= Offset && Offset <= 127) {
-    if (Un) {
-      Name = "blt.un.s";
-      Opcode = 0x37;
-    }
-    else {
-      Name = "blt.s";
-      Opcode = 0x32;
-    }
+  if (Unsigned) {
+    Opcode = 0x5B;
+    OpcodeName = "div.un";
   }
   else {
-    if (Un) {
-      Name = "blt.un";
-      Opcode = 0x44;
-    }
-    else {
-      Name = "blt";
-      Opcode = 0x3F;
-    }
+    Opcode = 0x5C;
+    OpcodeName = "div";
   }
+  Print = [&](raw_ostream &O) { O << OpcodeName; };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-cil::Break::Break()
+cil::Rem::Rem(bool Unsigned)
 {
-  Name = "break";
-  Opcode = 0x01;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::Leave::Leave(long Offset)
-  : Offset(Offset)
-{
-  if (-128 <= Offset && Offset <= 127) {
-    Name = "leave.s";
-    Opcode = 0xDE;
+  if (Unsigned) {
+    Opcode = 0x5D;
+    OpcodeName = "rem.un";
   }
   else {
-    Name = "leave";
-    Opcode = "0xDD";
+    Opcode = 0x5E;
+    OpcodeName = "rem";
   }
+  Print = [&](raw_ostream &O) { O << OpcodeName; };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 cil::Ret::Ret()
 {
-  Name = "ret";
   Opcode = 0x2A;
+  OpcodeName = "ret";
+  Print = [&](raw_ostream &O) { O << OpcodeName; };
 }
-
-////////////////////////////////////////////////////////////////////////////////
-cil::Dup::Dup()
-{
-  Name = "dup";
-  Opcode = 0x25;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-cil::Pop::Pop()
-{
-  Name = "pop";
-  Opcode = 0x26;
-}
-
