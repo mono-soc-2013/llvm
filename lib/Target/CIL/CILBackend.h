@@ -32,6 +32,7 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/GetElementPtrTypeIterator.h"
 #include "llvm/Target/TargetMachine.h"
+#include <list>
 #include <vector>
 
 namespace llvm {
@@ -76,32 +77,53 @@ public:
   virtual bool runOnModule(Module &Mod);
 
 protected:
-  static CILType *convertType(const Type *T);
+  static cil::Type *convertType(const Type *T);
+
+  static bool isReachable(const BasicBlock *Target,
+                          std::list<const BasicBlock *> &Sources);
+
+private:
+  DenseMap<GlobalVariable *, const cil::Type *> Globals;
+protected:
+  const cil::Type *getGlobalType(const GlobalVariable *Global);
+
+private:
+  DenseMap<AllocaInst *, uint16_t> RegLocals;
+  DenseMap<AllocaInst *, uint16_t> IndLocals;
+  DenseMap<Instruction *, uint16_t> TmpLocals;
+protected:
+  void makeLocals(Function &Fun);
+  bool isRegLocal(const Value *Val) const;
+  bool isIndLocal(const Value *Val) const;
+  bool isTmpLocal(const Value *Val) const;
+  uint16_t getRegLocalIndex(const Value *Val) const;
+  uint16_t getIndLocalIndex(const Value *Val) const;
+  uint16_t getTmpLocalIndex(const Value *Val) const;
+  void printLocals() const;
 
 protected:
   void makeNames(Function &Fun) const;
 
 private:
-  DenseMap<const Value *, uint16_t> Locals;
-protected:
-  void makeLocals(const Function &Fun);
-  bool isLocal(const Value *Val) const;
-  uint16_t getLocalIndex(const Value *Val) const;
-  void printLocals() const;
-
-private:
-  std::vector<const cil::Instruction *> Instructions;
+  std::list<const cil::Instruction *> Instructions;
 protected:
   void emitInstruction(const cil::Instruction *Inst);
   void loadValue(const Value *Val);
+  void loadValueAddr(const Value *Val);
   void processInstruction(const Instruction *Inst);
-  void makeInstructions(const Function &Fun);
+  void makeInstructions(const BasicBlock &BB);
   void printInstructions() const;
 
 protected:
-  void printModule(Module &Mod);
+  void printDataItem(const Constant *Init);
+  void printDataBody(const Constant *Init);
+  void printVariableDeclaration(GlobalVariable &Var);
   void printVariable(GlobalVariable &Var);
+
+  void printFunctionDeclaration(Function &Fun);
   void printFunction(Function &Fun);
+
+  void printModule(Module &Mod);
 };
 
 }

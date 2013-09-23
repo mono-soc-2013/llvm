@@ -18,7 +18,7 @@ Target llvm::TheCILTarget;
 
 extern "C" void LLVMInitializeCILTargetInfo()
 {
-  RegisterTarget<Triple::cil, /*HasJIT=*/false>
+  RegisterTarget<Triple::cil, false>
     X(TheCILTarget, "cil", "Common Intermediate Language");
 }
 

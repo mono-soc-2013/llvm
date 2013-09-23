@@ -20,12 +20,15 @@ namespace llvm
 {
 struct CILTargetMachine : public TargetMachine
 {
- CILTargetMachine(const Target &T, StringRef TT,
-                  StringRef CPU, StringRef FS,
-                  const TargetOptions &Options,
-                  Reloc::Model RM, CodeModel::Model CM,
-                  CodeGenOpt::Level OL)
-   : TargetMachine(T, TT, CPU, FS, Options)
+  CILTargetMachine(const Target &T,
+                   StringRef TargetTriple,
+                   StringRef CPU,
+                   StringRef FS,
+                   const TargetOptions &Options,
+                   Reloc::Model RM,
+                   CodeModel::Model CM,
+                   CodeGenOpt::Level OL)
+    : TargetMachine(T, TargetTriple, CPU, FS, Options)
   {
   }
 
